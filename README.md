@@ -68,10 +68,6 @@ The chatbot uses two comprehensive therapeutic books by Christian Dominique:
 ## 🚨 Crisis Support
 
 Auto-detects crisis keywords and provides:
-- 988 Suicide & Crisis Lifeline
-- Crisis Text Line: HOME to 741741
-- SAMHSA Helpline: 1-800-662-4357
-
 ---
 
 **Built with ❤️ for digital wellness**
