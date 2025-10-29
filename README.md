@@ -13,8 +13,6 @@ This chatbot is production-ready with enterprise-grade features:
 - ✅ **Enhanced logging** with metrics
 - ✅ **Smart initialization** (instant restart)
 
-**[View Complete MVP Upgrade Guide →](MVP_UPGRADE_GUIDE.md)**
-
 ## 🎯 Core Features
 
 - **WhatsApp Integration**: Twilio WhatsApp Business API with rate limiting
@@ -79,13 +77,6 @@ The chatbot uses two comprehensive therapeutic books by Christian Dominique:
    - Philosophy (Stoicism, Buddhism, Daoism), psychology, neuroscience
    - Internal locus of control and mindset mastery
 
-## 🚨 Crisis Support
-
-Auto-detects crisis keywords and provides:
-- 988 Suicide & Crisis Lifeline
-- Crisis Text Line: HOME to 741741
-- SAMHSA Helpline: 1-800-662-4357
-
 ---
 
-**Built with ❤️ for digital wellness**
+**Built for digital wellness**
