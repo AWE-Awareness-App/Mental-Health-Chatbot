@@ -1,0 +1,94 @@
+# Pipeline will trigger on any branch push
+trigger:
+  branches:
+    include:
+      - '*'  # Monitor all branches
+
+# Only allow manual triggers for non-master branches
+pr: none
+
+# Define stages for build and deploy
+stages:
+  - stage: Build
+    displayName: 'Build and Push Image'
+    jobs:
+      - job: Build
+        pool:
+          name: 'awe-us'
+        steps:
+          - checkout: self
+
+          - task: Docker@2
+            displayName: 'Build and push image'
+            inputs:
+              command: buildAndPush
+              containerRegistry: $(dockerRegistryServiceConnection)
+              repository: $(imageRepository)
+              dockerfile: $(Build.SourcesDirectory)/Dockerfile
+              tags: |
+                $(Build.SourceBranchName)-$(Build.BuildId)
+                $(Build.SourceBranchName)-latest
+
+  - stage: Deploy
+    displayName: 'Deploy to Production'
+    # This stage will only run for the main branch
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    dependsOn: Build
+    jobs:
+      - deployment: Deploy
+        pool:
+          name: 'awe-us'
+        environment: 'Production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: AzureCLI@2
+                  displayName: 'Deploy to Azure App Service'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo "Deploying image to App Service..."
+                      
+                      # Use the main-latest tag for production deployment
+                      PRODUCTION_TAG="main-latest"
+                      
+                      az webapp config container set \
+                        --name $(webAppName) \
+                        --resource-group $(resourceGroup) \
+                        --docker-custom-image-name $(containerRegistry)/$(imageRepository):$PRODUCTION_TAG \
+                        --docker-registry-server-url https://$(containerRegistry) \
+                        --docker-registry-server-user $(acrName) \
+                        --docker-registry-server-password $(az acr credential show --name $(acrName) --query "passwords[0].value" -o tsv)
+                      
+                      echo "Setting app settings..."
+                      az webapp config appsettings set \
+                        --name $(webAppName) \
+                        --resource-group $(resourceGroup) \
+                        --settings \
+                          DB_HOST=$(DB_HOST) \
+                      
+                      echo "Restarting Web App..."
+                      az webapp restart --name $(webAppName) --resource-group $(resourceGroup)
+
+variables:
+  - group: 'awe-chat-bot'
+  - name: dockerRegistryServiceConnection
+    value: 'awe-acr-connection'
+  - name: imageRepository
+    value: 'mental-health-chat-bot'
+  - name: containerRegistry
+    value: 'aweacrconnection.azurecr.io'
+  - name: acrName
+    value: 'aweacrconnection'
+  - name: tag
+    value: '$(Build.BuildId)'
+  - name: azureSubscription
+    value: 'awe-azure-subscription'
+  - name: webAppName
+    value: 'awe-chat-bot'
+  - name: resourceGroup
+    value: 'awe-web'
