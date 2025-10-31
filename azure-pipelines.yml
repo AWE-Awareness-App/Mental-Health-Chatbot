@@ -24,7 +24,8 @@ stages:
               command: buildAndPush
               containerRegistry: $(dockerRegistryServiceConnection)
               repository: $(imageRepository)
-              dockerfile: $(Build.SourcesDirectory)/Dockerfile
+              dockerfile: $(Build.SourcesDirectory)/backend/Dockerfile
+              buildContext: $(Build.SourcesDirectory)/backend
               tags: |
                 $(Build.SourceBranchName)-$(Build.BuildId)
                 $(Build.SourceBranchName)-latest
