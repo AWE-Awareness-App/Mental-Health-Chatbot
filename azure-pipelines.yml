@@ -76,7 +76,7 @@ stages:
                       az webapp restart --name $(webAppName) --resource-group $(resourceGroup)
 
 variables:
-  - group: 'awe-chat-bot'
+  - group: 'chatbot-mvp'
   - name: dockerRegistryServiceConnection
     value: 'awe-acr-connection'
   - name: imageRepository
