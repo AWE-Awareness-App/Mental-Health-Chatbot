@@ -2,7 +2,7 @@
 trigger:
   branches:
     include:
-      - '*'  # Monitor all branches
+      - '*'       # Monitor all branches
 
 # Only allow manual triggers for non-master branches
 pr: none
@@ -17,7 +17,6 @@ stages:
           name: 'awe-us'
         steps:
           - checkout: self
-
           - task: Docker@2
             displayName: 'Build and push image'
             inputs:
@@ -45,6 +44,7 @@ stages:
             deploy:
               steps:
                 - checkout: self
+                
                 - task: AzureCLI@2
                   displayName: 'Deploy to Azure App Service'
                   inputs:
@@ -57,6 +57,7 @@ stages:
                       # Use the main-latest tag for production deployment
                       PRODUCTION_TAG="main-latest"
                       
+                      # Set docker container configuration
                       az webapp config container set \
                         --name $(webAppName) \
                         --resource-group $(resourceGroup) \
@@ -65,18 +66,28 @@ stages:
                         --docker-registry-server-user $(acrName) \
                         --docker-registry-server-password $(az acr credential show --name $(acrName) --query "passwords[0].value" -o tsv)
                       
-                      echo "Setting app settings..."
+                      echo "Setting app settings from chatbot-mvp library..."
+                      
+                      # Set all environment variables from the library
                       az webapp config appsettings set \
                         --name $(webAppName) \
                         --resource-group $(resourceGroup) \
                         --settings \
-                          DB_HOST=$(DB_HOST) \
+                        DATABASE_URL=$(DATABASE_URL) \
+                        OPENAI_API_KEY=$(OPENAI_API_KEY) \
+                        TWILIO_ACCOUNT_SID=$(TWILIO_ACCOUNT_SID) \
+                        TWILIO_AUTH_TOKEN=$(TWILIO_AUTH_TOKEN) \
+                        TWILIO_WHATSAPP_NUMBER=$(TWILIO_WHATSAPP_NUMBER) \
+                        CORS_ORIGINS=$(CORS_ORIGINS) \
+                        LOG_LEVEL=$(LOG_LEVEL)
                       
                       echo "Restarting Web App..."
                       az webapp restart --name $(webAppName) --resource-group $(resourceGroup)
+                      
+                      echo "Deployment complete!"
 
 variables:
-  - group: 'chatbot-mvp'
+  - group: 'chatbot-mvp'  
   - name: dockerRegistryServiceConnection
     value: 'awe-acr-connection'
   - name: imageRepository
