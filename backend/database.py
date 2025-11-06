@@ -12,17 +12,18 @@ import uuid
 import os
 from pgvector.sqlalchemy import Vector
 
-# Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://chatbot_user:chatbot_pass@localhost:5432/therapy_chatbot")
-
-# Create engine
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
-
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 # Base class for models
 Base = declarative_base()
+
+# Global references for engine and SessionLocal (set by server.py)
+engine = None
+SessionLocal = None
+
+def set_engine_and_session(engine_instance, session_factory):
+    """Set engine and session factory from server.py"""
+    global engine, SessionLocal
+    engine = engine_instance
+    SessionLocal = session_factory
 
 
 class User(Base):

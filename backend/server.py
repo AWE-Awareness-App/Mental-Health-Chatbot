@@ -22,7 +22,8 @@ import logging
 from contextlib import asynccontextmanager
 
 # Import local modules
-from database import init_db, get_db
+from database import init_db, get_db, Base
+from database_aad import get_database_engine
 from chatbot import get_chatbot
 from rag_system_v2 import initialize_knowledge_base
 from utils.startup_checks import run_all_startup_checks
@@ -45,6 +46,19 @@ TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 # Create logs directory
 os.makedirs('logs', exist_ok=True)
 
+# Initialize database engine with Azure AD authentication
+engine = get_database_engine()
+from sqlalchemy.orm import sessionmaker
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False
+)
+
+# Set engine and session in database module for backward compatibility
+from database import set_engine_and_session
+set_engine_and_session(engine, SessionLocal)
 
 # Lifespan context manager for startup/shutdown events
 @asynccontextmanager
@@ -54,6 +68,16 @@ async def lifespan(app: FastAPI):
     log_startup_banner()
     
     try:
+        # Test Azure AD database connection
+        logger.info("🔐 Testing Azure AD database connection...")
+        try:
+            with SessionLocal() as db:
+                db.execute("SELECT 1")
+            logger.info("✓ Database connection verified")
+        except Exception as e:
+            logger.error(f"✗ Database initialization failed: {str(e)}")
+            raise
+        
         # Run startup validation checks
         logger.info("🔍 Running startup validation checks...")
         validation_results = run_all_startup_checks()
@@ -96,6 +120,11 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("👋 Shutting down chatbot gracefully...")
+    try:
+        engine.dispose()
+        logger.info("✓ Database connections closed")
+    except Exception as e:
+        logger.error(f"✗ Error during shutdown: {str(e)}")
 
 
 # Create FastAPI app
