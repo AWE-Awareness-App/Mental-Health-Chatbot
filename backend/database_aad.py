@@ -67,6 +67,7 @@ class AzureADPostgresConnection:
             raise
         
         # Build connection URL with sslmode=require for Azure
+        password = self.get_access_token()  # ← GET THE TOKEN
         database_url = URL.create(
             "postgresql+psycopg2",
             username=username,
