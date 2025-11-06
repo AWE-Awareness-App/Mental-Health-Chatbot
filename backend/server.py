@@ -56,6 +56,7 @@ SessionLocal = sessionmaker(
     expire_on_commit=False
 )
 
+from sqlalchemy import text
 # Set engine and session in database module for backward compatibility
 from database import set_engine_and_session
 set_engine_and_session(engine, SessionLocal)
@@ -72,7 +73,7 @@ async def lifespan(app: FastAPI):
         logger.info("🔐 Testing Azure AD database connection...")
         try:
             with SessionLocal() as db:
-                db.execute("SELECT 1")
+                db.execute(text("SELECT 1"))
             logger.info("✓ Database connection verified")
         except Exception as e:
             logger.error(f"✗ Database initialization failed: {str(e)}")
