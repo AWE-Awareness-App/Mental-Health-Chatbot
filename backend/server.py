@@ -1,336 +1,259 @@
 """
-FastAPI server for WhatsApp Therapeutic Chatbot - MVP VERSION.
-Handles Twilio WhatsApp webhook integration and chatbot responses.
-
-ENHANCEMENTS:
-- Environment variable validation at startup
-- Enhanced logging with structured format
-- Rate limiting for webhook endpoint
-- Comprehensive error handling
+AWE Mental Health Chatbot - FastAPI Server
+Handles WhatsApp messaging with therapeutic AI responses
 """
 
-from fastapi import FastAPI, APIRouter, Request, HTTPException, Depends
-from fastapi.responses import PlainTextResponse
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from twilio.twiml.messaging_response import MessagingResponse
-from twilio.request_validator import RequestValidator
-from sqlalchemy.orm import Session
-from pathlib import Path
 import os
 import logging
 from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 
-# Import local modules
-from database import init_db, get_db, Base
+# Database setup with Azure AD
 from database_aad import get_database_engine
-from chatbot import get_chatbot
-from rag_system_v2 import initialize_knowledge_base
-from utils.startup_checks import run_all_startup_checks
-from utils.logging_config import setup_logging, log_startup_banner
-from services.rate_limiter import get_rate_limiter
+from database import Base, set_engine_and_session
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
-# Setup enhanced logging
-setup_logging(log_level=os.getenv("LOG_LEVEL", "INFO"))
+# Import chatbot
+from chatbot import TherapeuticChatbot
+from rag_system_v2 import TherapeuticRAG
+
+# Logging setup
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
-
-# Twilio configuration
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-
-# Create logs directory
-os.makedirs('logs', exist_ok=True)
-
-# Initialize database engine with Azure AD authentication
+# ===== DATABASE SETUP WITH AZURE AD =====
+# Create engine with Azure AD authentication
 engine = get_database_engine()
-from sqlalchemy.orm import sessionmaker
-SessionLocal = sessionmaker(
+
+# Create SessionLocal factory
+session_factory = sessionmaker(
     bind=engine,
     autoflush=False,
     autocommit=False,
     expire_on_commit=False
 )
 
-from sqlalchemy import text
-# Set engine and session in database module for backward compatibility
-from database import set_engine_and_session
-set_engine_and_session(engine, SessionLocal)
+# CRITICAL: Tell database.py to use our Azure AD engine!
+set_engine_and_session(engine, session_factory)
 
-# Lifespan context manager for startup/shutdown events
+# Module-level SessionLocal for backward compatibility
+SessionLocal = session_factory
+
+# ===== APPLICATION STARTUP/SHUTDOWN =====
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handle startup and shutdown events with comprehensive validation."""
-    # Startup
-    log_startup_banner()
+    """
+    FastAPI lifespan context manager for startup and shutdown events
+    """
+    # ===== STARTUP =====
+    logger.info("🚀 Starting chatbot initialization...")
     
     try:
-        # Test Azure AD database connection
+        # Test database connection with Azure AD
         logger.info("🔐 Testing Azure AD database connection...")
-        try:
-            with SessionLocal() as db:
-                db.execute(text("SELECT 1"))
-            logger.info("✓ Database connection verified")
-        except Exception as e:
-            logger.error(f"✗ Database initialization failed: {str(e)}")
-            raise
-        
-        # Run startup validation checks
-        logger.info("🔍 Running startup validation checks...")
-        validation_results = run_all_startup_checks()
-        
-        # Log validation results
-        if not validation_results["environment"]["valid"]:
-            logger.warning("⚠️ Environment validation issues detected:")
-            for error in validation_results["environment"]["errors"]:
-                logger.warning(f"  {error}")
-        
-        if not validation_results["database"]["connected"]:
-            logger.error("❌ Database connection failed! Application may not work correctly.")
-        
-        if not validation_results["pgvector"]["installed"]:
-            logger.error("❌ pgvector extension not installed! Vector search will not work.")
-        
-        # Initialize database tables
-        logger.info("📊 Initializing database tables...")
-        init_db()
-        logger.info("✅ Database tables ready")
-        
-        # Initialize knowledge base
-        logger.info("📚 Initializing knowledge base...")
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key and openai_key != "your_openai_api_key_here":
-            success = initialize_knowledge_base()
-            if success:
-                logger.info("✅ Knowledge base ready!")
-            else:
-                logger.warning("⚠️ Knowledge base initialization had issues")
-        else:
-            logger.warning("⚠️ OpenAI API key not configured. Knowledge base not initialized.")
-        
-        logger.info("🎉 Chatbot startup complete and ready to serve!")
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        logger.info("✓ Database connection verified")
     except Exception as e:
-        logger.error(f"❌ Error during startup: {e}", exc_info=True)
-        logger.warning("⚠️ Application may not function correctly")
+        logger.error(f"✗ Database initialization failed: {e}")
+        raise
+    
+    # Initialize RAG system
+    try:
+        logger.info("📚 Initializing knowledge base (RAG system)...")
+        rag_system = TherapeuticRAG()
+        logger.info("✓ Knowledge base initialized")
+    except Exception as e:
+        logger.warning(f"⚠️ RAG system initialization failed: {e}")
+        rag_system = None
+    
+    # Initialize chatbot
+    try:
+        logger.info("🤖 Initializing therapeutic chatbot...")
+        chatbot = TherapeuticChatbot()
+        logger.info("✓ Chatbot initialized")
+        app.state.chatbot = chatbot
+        app.state.rag_system = rag_system
+    except Exception as e:
+        logger.error(f"✗ Chatbot initialization failed: {e}")
+        raise
+    
+    logger.info("""
+    
+╔══════════════════════════════════════════════════════════════╗
+║       WhatsApp Therapeutic Chatbot - Production MVP         ║
+║              Digital Wellness & Mental Health                ║
+╚══════════════════════════════════════════════════════════════╝
+    
+    """)
+    logger.info("🎉 Chatbot startup complete and ready to serve!")
     
     yield
     
-    # Shutdown
+    # ===== SHUTDOWN =====
     logger.info("👋 Shutting down chatbot gracefully...")
     try:
         engine.dispose()
         logger.info("✓ Database connections closed")
     except Exception as e:
-        logger.error(f"✗ Error during shutdown: {str(e)}")
+        logger.error(f"✗ Error during shutdown: {e}")
+    logger.info("👋 Shutdown complete")
 
-
-# Create FastAPI app
+# ===== FASTAPI APP =====
 app = FastAPI(
-    title="WhatsApp Therapeutic Chatbot",
-    description="Digital wellness chatbot for managing screen time and technology addiction",
+    title="AWE Mental Health Chatbot",
+    description="Therapeutic chatbot for digital wellness via WhatsApp",
     version="1.0.0",
     lifespan=lifespan
 )
 
-# Create API router
-api_router = APIRouter(prefix="/api")
+# ===== CORS CONFIGURATION =====
+cors_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
 
-
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ===== ROUTES =====
 
-# Health check endpoint
-@api_router.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "WhatsApp Therapeutic Chatbot",
-        "version": "1.0.0"
-    }
-
-
-@api_router.get("/")
+@app.get("/")
 async def root():
-    """Root endpoint with service information."""
+    """Root endpoint - basic health check"""
     return {
-        "message": "WhatsApp Therapeutic Chatbot API",
-        "status": "running",
-        "endpoints": {
-            "health": "/api/health",
-            "whatsapp_webhook": "/api/whatsapp (POST)",
-            "status": "/api/status"
-        }
+        "status": "online",
+        "service": "WhatsApp Therapeutic Chatbot",
+        "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat()
     }
 
-
-@api_router.get("/status")
-async def status(db: Session = Depends(get_db)):
-    """Get service status and statistics."""
+@app.get("/api/health")
+async def health():
+    """Health check endpoint"""
     try:
-        from database import User, Message, KnowledgeDocument
-        
-        total_users = db.query(User).count()
-        total_messages = db.query(Message).count()
-        knowledge_docs = db.query(KnowledgeDocument).count()
+        # Verify database connection
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
         
         return {
-            "status": "operational",
+            "status": "healthy",
+            "service": "WhatsApp Therapeutic Chatbot",
+            "version": "1.0.0",
             "database": "connected",
-            "statistics": {
-                "total_users": total_users,
-                "total_messages": total_messages,
-                "knowledge_base_documents": knowledge_docs
-            },
-            "configuration": {
-                "twilio_configured": bool(TWILIO_ACCOUNT_SID and TWILIO_ACCOUNT_SID != "your_twilio_account_sid_here"),
-                "openai_configured": bool(os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_API_KEY") != "your_openai_api_key_here")
-            }
+            "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
-        logger.error(f"Error getting status: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=500, detail="Database connection failed")
 
+@app.get("/api/status")
+async def status():
+    """Service status endpoint"""
+    return {
+        "status": "operational",
+        "service": "AWE Mental Health Chatbot",
+        "version": "1.0.0",
+        "environment": os.getenv("ENVIRONMENT", "production"),
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
-@api_router.post("/whatsapp")
-async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
+@app.post("/api/whatsapp")
+async def whatsapp_webhook(request: Request):
     """
-    Twilio WhatsApp webhook endpoint with rate limiting.
-    Receives messages from WhatsApp and sends therapeutic responses.
+    WhatsApp webhook endpoint
+    Receives messages from Twilio and routes to chatbot
     """
     try:
-        # Parse form data from Twilio
         form_data = await request.form()
+        incoming_message = form_data.get("Body", "")
+        phone_number = form_data.get("From", "")
         
-        # Extract message details
-        from_number = form_data.get("From", "")  # Format: whatsapp:+1234567890
-        message_body = form_data.get("Body", "")
+        logger.info(f"📱 Received message from {phone_number}: {incoming_message}")
         
-        logger.info(f"📱 Received message from {from_number}: {message_body[:50]}...")
+        if not incoming_message:
+            logger.warning("Empty message received")
+            return {"status": "processed"}
         
-        # Rate limiting check
-        rate_limiter = get_rate_limiter()
-        if not rate_limiter.is_allowed(from_number):
-            retry_after = rate_limiter.get_retry_after(from_number)
-            logger.warning(f"⚠️ Rate limit exceeded for {from_number}")
-            
-            response = MessagingResponse()
-            response.message(
-                f"You're sending messages too quickly. Please wait {retry_after} seconds and try again. "
-                "I'm here to help, but let's take it one message at a time. 😊"
-            )
-            return PlainTextResponse(str(response), media_type="application/xml")
-        
-        # Validate Twilio request (optional but recommended for production)
-        if TWILIO_AUTH_TOKEN and TWILIO_AUTH_TOKEN != "your_twilio_auth_token_here":
-            validator = RequestValidator(TWILIO_AUTH_TOKEN)
-            url = str(request.url)
-            signature = request.headers.get("X-Twilio-Signature", "")
-            
-            # Note: In production, enable this validation
-            # if not validator.validate(url, dict(form_data), signature):
-            #     logger.warning(f"⚠️ Invalid Twilio signature from {from_number}")
-            #     raise HTTPException(status_code=403, detail="Invalid signature")
-        
-        # Check if message is empty
-        if not message_body.strip():
-            response = MessagingResponse()
-            response.message("I received an empty message. How can I help you today with digital wellness?")
-            return PlainTextResponse(str(response), media_type="application/xml")
-        
-        # Get chatbot instance
+        # Process message through chatbot
+        db = SessionLocal()
         try:
-            chatbot = get_chatbot()
-        except ValueError as e:
-            logger.error(f"❌ Chatbot not configured: {e}")
-            response = MessagingResponse()
-            response.message("The chatbot is currently being configured. Please try again later.")
-            return PlainTextResponse(str(response), media_type="application/xml")
-        
-        # Generate therapeutic response
-        result = chatbot.generate_response(db, from_number, message_body)
-        bot_response = result["response"]
-        
-        # Format for WhatsApp
-        formatted_response = chatbot.format_whatsapp_message(bot_response)
-        
-        # Create Twilio response
-        twiml_response = MessagingResponse()
-        twiml_response.message(formatted_response)
-        
-        logger.info(f"✅ Sent response to {from_number} ({len(formatted_response)} chars)")
-        
-        return PlainTextResponse(str(twiml_response), media_type="application/xml")
-    
+            chatbot = app.state.chatbot
+            response = chatbot.generate_response(
+                phone_number=phone_number,
+                user_message=incoming_message,
+                db=db
+            )
+            
+            logger.info(f"✓ Generated response: {response[:100]}...")
+            return {"status": "processed", "message": response}
+            
+        except Exception as e:
+            logger.error(f"✗ Error processing message: {e}")
+            return {
+                "status": "error",
+                "message": "I apologize, but I'm having trouble processing your message right now. This is a temporary technical issue on my end.\n\nPlease try again in a moment. If you're experiencing a mental health crisis, please contact:\n- 988 Suicide & Crisis Lifeline\n- Crisis Text Line: Text HOME to 741741\n\nI'm here to help with digital wellness when you're ready to try again."
+            }
+        finally:
+            db.close()
+            
     except Exception as e:
-        logger.error(f"❌ Error processing WhatsApp message: {e}", exc_info=True)
-        
-        # Send error response to user
-        response = MessagingResponse()
-        response.message(
-            "I apologize, but I encountered an error. Please try again. "
-            "If you need immediate help, contact 988 (Suicide & Crisis Lifeline)."
-        )
-        return PlainTextResponse(str(response), media_type="application/xml")
-
-
-@api_router.post("/test-message")
-async def test_message(
-    message: str,
-    whatsapp_number: str = "whatsapp:+1234567890",
-    db: Session = Depends(get_db)
-):
-    """
-    Test endpoint for generating responses without Twilio.
-    Useful for development and testing.
-    """
-    try:
-        chatbot = get_chatbot()
-        result = chatbot.generate_response(db, whatsapp_number, message)
-        
-        return {
-            "success": True,
-            "user_message": message,
-            "bot_response": result["response"],
-            "is_crisis": result["is_crisis"],
-            "user_id": result["user_id"]
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=503, detail=f"Chatbot not configured: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error in test message: {e}")
+        logger.error(f"✗ Webhook error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/test-message")
+async def test_message(message: dict):
+    """Test endpoint for sending messages directly"""
+    try:
+        user_message = message.get("message", "")
+        phone_number = message.get("phone", "test")
+        
+        db = SessionLocal()
+        try:
+            chatbot = app.state.chatbot
+            response = chatbot.generate_response(
+                phone_number=phone_number,
+                user_message=user_message,
+                db=db
+            )
+            return {"response": response}
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Test message error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Include API router
-app.include_router(api_router)
+# ===== ERROR HANDLERS =====
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Global exception handler"""
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": "Internal server error",
+            "detail": str(exc)
+        }
+    )
 
-
-# Root endpoint (outside API prefix)
-@app.get("/")
-async def root_redirect():
-    """Redirect to API root."""
-    return {
-        "message": "WhatsApp Therapeutic Chatbot",
-        "api_docs": "/docs",
-        "api_base": "/api"
-    }
-
-
+# ===== RUN SERVER =====
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8001)),
+        log_level="info"
+    )
