@@ -7,7 +7,7 @@ Customized for AWE Mental Health Chatbot project structure
 from azure.identity import DefaultAzureCredential
 from azure.core.exceptions import ClientAuthenticationError
 from sqlalchemy import create_engine, event
-from sqlalchemy.engine import URL, Engine
+from sqlalchemy.pool import NullPool
 import os
 import logging
 from typing import Optional
@@ -43,51 +43,34 @@ class AzureADPostgresConnection:
             logger.error(f"Failed to get Azure AD token: {str(e)}")
             raise Exception(f"Azure AD authentication failed: {str(e)}")
     
-    def create_engine(self) -> Engine:
+    def create_engine(self):
         """
         Create SQLAlchemy engine with Azure AD authentication.
         
         Returns:
-            Engine: Configured SQLAlchemy engine with automatic token refresh
+            SQLAlchemy engine with automatic token refresh
         """
-        
         # Get database configuration from environment variables
         host = os.getenv("PGHOST", "awe-database-progres-prod.postgres.database.azure.com")
         database = os.getenv("PGDATABASE", "postgres")
         port = int(os.getenv("PGPORT", "5432"))
-        username = os.getenv("PGUSER", "awe-chat-bot")
+        username = os.getenv("PGUSER", "awe-chat-bot@awe-database-progres-prod")
         
-        logger.info(f"Connecting to PostgreSQL: {host}:{port}/{database} as {username}")
+        logger.info(f"Connecting to PostgreSQL: {host}:{port}/{database}")
         
         # Get initial access token
         try:
-            password = self.get_access_token()
+            token = self.get_access_token()
         except Exception as e:
             logger.error(f"Failed to initialize database connection: {str(e)}")
             raise
         
-        # Build connection URL with sslmode=require for Azure
-        password = self.get_access_token()  # ← GET THE TOKEN
+        # Simple connection string with token as password
+        connection_string = f"postgresql+psycopg2://{username}:{token}@{host}:{port}/{database}?sslmode=require"
         
-        # Azure AD requires username@hostname format
-        azure_username = f"{username}@{host.split('.')[0]}"
-        
-        database_url = URL.create(
-            "postgresql+psycopg2",
-            username=azure_username,
-            password=password,
-            host=host,
-            port=port,
-            database=database,
-            query={"sslmode": "require"}
-        )
-        
-        # Create engine with connection pooling and token refresh
-        # Pool size: 5-10 connections (suitable for single app instance)
-        # Pre-ping: ensures stale connections are detected
-        # Recycle: PostgreSQL bearer tokens expire ~60 minutes
+        # Create engine
         engine = create_engine(
-            database_url,
+            connection_string,
             pool_size=10,
             max_overflow=20,
             pool_pre_ping=True,              # Verify connections before using
@@ -118,12 +101,12 @@ class AzureADPostgresConnection:
         return engine
 
 
-def get_database_engine() -> Engine:
+def get_database_engine():
     """
     Factory function to create and return a configured database engine.
     
     Returns:
-        Engine: SQLAlchemy engine ready for use
+        SQLAlchemy engine ready for use
         
     Example:
         from backend.database_aad import get_database_engine
