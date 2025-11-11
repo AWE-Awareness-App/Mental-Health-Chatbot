@@ -3,6 +3,7 @@ AWE Mental Health Chatbot - FastAPI Server
 Handles WhatsApp messaging with therapeutic AI responses
 """
 
+
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -11,15 +12,18 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
+
 # Database setup with Azure AD
 from database_aad import get_database_engine
 from database import Base, set_engine_and_session
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
 
+
 # Import chatbot
 from chatbot import TherapeuticChatbot
 from rag_system_v2 import TherapeuticRAG
+
 
 # Logging setup
 logging.basicConfig(
@@ -29,9 +33,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ===== DATABASE SETUP WITH AZURE AD =====
-# Create engine with Azure AD authentication
+
+# ===== DATABASE SETUP =====
+# Create engine with simple authentication
 engine = get_database_engine()
+
 
 # Create SessionLocal factory
 session_factory = sessionmaker(
@@ -41,11 +47,14 @@ session_factory = sessionmaker(
     expire_on_commit=False
 )
 
-# CRITICAL: Tell database.py to use our Azure AD engine!
+
+# CRITICAL: Tell database.py to use our engine!
 set_engine_and_session(engine, session_factory)
+
 
 # Module-level SessionLocal for backward compatibility
 SessionLocal = session_factory
+
 
 # ===== APPLICATION STARTUP/SHUTDOWN =====
 @asynccontextmanager
@@ -57,8 +66,8 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting chatbot initialization...")
     
     try:
-        # Test database connection with Azure AD
-        logger.info("🔐 Testing Azure AD database connection...")
+        # Test database connection
+        logger.info("🔐 Testing database connection...")
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
         logger.info("✓ Database connection verified")
@@ -75,11 +84,17 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ RAG system initialization failed: {e}")
         rag_system = None
     
-    # Initialize chatbot
+    # Initialize chatbot with OpenAI API key
     try:
         logger.info("🤖 Initializing therapeutic chatbot...")
-        chatbot = TherapeuticChatbot()
-        logger.info("✓ Chatbot initialized")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        
+        if not openai_api_key:
+            logger.error("✗ OPENAI_API_KEY environment variable not set!")
+            raise ValueError("OPENAI_API_KEY is required")
+        
+        chatbot = TherapeuticChatbot(openai_api_key=openai_api_key)
+        logger.info("✓ Chatbot initialized successfully")
         app.state.chatbot = chatbot
         app.state.rag_system = rag_system
     except Exception as e:
@@ -107,6 +122,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"✗ Error during shutdown: {e}")
     logger.info("👋 Shutdown complete")
 
+
 # ===== FASTAPI APP =====
 app = FastAPI(
     title="AWE Mental Health Chatbot",
@@ -115,8 +131,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+
 # ===== CORS CONFIGURATION =====
 cors_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -126,7 +144,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ===== ROUTES =====
+
 
 @app.get("/")
 async def root():
@@ -137,6 +157,7 @@ async def root():
         "version": "1.0.0",
         "timestamp": datetime.utcnow().isoformat()
     }
+
 
 @app.get("/api/health")
 async def health():
@@ -157,6 +178,7 @@ async def health():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=500, detail="Database connection failed")
 
+
 @app.get("/api/status")
 async def status():
     """Service status endpoint"""
@@ -168,6 +190,7 @@ async def status():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+
 @app.post("/api/whatsapp")
 async def whatsapp_webhook(request: Request):
     """
@@ -176,7 +199,7 @@ async def whatsapp_webhook(request: Request):
     """
     try:
         form_data = await request.form()
-        incoming_message = form_data.get("Body", "")
+        incoming_message = form_data.get("Body", "").strip()
         phone_number = form_data.get("From", "")
         
         logger.info(f"📱 Received message from {phone_number}: {incoming_message}")
@@ -211,6 +234,7 @@ async def whatsapp_webhook(request: Request):
         logger.error(f"✗ Webhook error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/test-message")
 async def test_message(message: dict):
     """Test endpoint for sending messages directly"""
@@ -234,6 +258,7 @@ async def test_message(message: dict):
         logger.error(f"Test message error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ===== ERROR HANDLERS =====
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
@@ -247,6 +272,7 @@ async def general_exception_handler(request: Request, exc: Exception):
             "detail": str(exc)
         }
     )
+
 
 # ===== RUN SERVER =====
 if __name__ == "__main__":
