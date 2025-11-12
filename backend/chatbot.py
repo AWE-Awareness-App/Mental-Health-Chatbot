@@ -6,6 +6,7 @@ ENHANCEMENTS:
 - Robust error handling with graceful degradation
 - Fallback responses when APIs fail
 - Better logging and metrics tracking
+- Handles missing database columns gracefully
 """
 
 import os
@@ -24,7 +25,6 @@ import logging
 import time
 
 logger = logging.getLogger(__name__)
-
 
 class TherapeuticChatbot:
     """Main chatbot class for handling therapeutic conversations."""
@@ -61,6 +61,28 @@ I'm here to support you with digital wellness, but professional crisis counselor
         message_lower = message.lower()
         return any(keyword in message_lower for keyword in self.CRISIS_KEYWORDS)
     
+    def _get_or_create_user_safe(self, db: Session, whatsapp_number: str):
+        """
+        Safely get or create user, handling missing database columns gracefully.
+        
+        Returns:
+            User object or None if operation fails
+        """
+        try:
+            user = get_or_create_user(db, whatsapp_number)
+            logger.info(f"✓ User retrieved/created: {whatsapp_number}")
+            return user
+        except Exception as e:
+            logger.warning(f"⚠️ Could not get/create user (column may not exist): {e}")
+            # Return a minimal user-like object
+            class MinimalUser:
+                def __init__(self, phone):
+                    self.id = hash(phone)  # Generate a simple ID from phone
+                    self.whatsapp_number = phone
+                    self.crisis_flag = False
+            
+            return MinimalUser(whatsapp_number)
+    
     def generate_response(self, db: Session, whatsapp_number: str, 
                          user_message: str) -> Dict:
         """
@@ -72,64 +94,66 @@ I'm here to support you with digital wellness, but professional crisis counselor
         start_time = time.time()
         
         try:
-            # Get or create user
-            user = get_or_create_user(db, whatsapp_number)
+            # Get or create user (safely handle missing columns)
+            user = self._get_or_create_user_safe(db, whatsapp_number)
             
             # Check for crisis content
             is_crisis = self.detect_crisis(user_message)
             
             if is_crisis:
                 logger.warning(f"⚠️ Crisis content detected from {whatsapp_number}")
-                user.crisis_flag = True
-                db.commit()
                 
-                # Get or create conversation
-                conversation = get_active_conversation(db, user.id)
-                
-                # Save user message (embedding optional for crisis)
+                # Try to mark user as crisis flag (if possible)
                 try:
-                    user_embedding = self.rag.create_embedding(user_message)
+                    if hasattr(user, 'crisis_flag'):
+                        user.crisis_flag = True
+                        db.commit()
                 except Exception as e:
-                    logger.error(f"❌ Failed to create embedding for crisis message: {e}")
-                    user_embedding = None
+                    logger.warning(f"⚠️ Could not save crisis flag: {e}")
                 
-                save_message(
-                    db, conversation.id, user.id, "user", 
-                    user_message, user_embedding, contains_crisis=True
-                )
-                
-                # Save crisis response
+                # Try to save crisis message (if possible)
                 try:
-                    crisis_embedding = self.rag.create_embedding(self.CRISIS_RESPONSE)
-                except Exception:
-                    crisis_embedding = None
+                    conversation = get_active_conversation(db, user.id)
+                    try:
+                        crisis_embedding = self.rag.create_embedding(self.CRISIS_RESPONSE)
+                    except Exception:
+                        crisis_embedding = None
+                    
+                    save_message(
+                        db, conversation.id, user.id, "assistant",
+                        self.CRISIS_RESPONSE, crisis_embedding
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not save crisis message: {e}")
                 
-                save_message(
-                    db, conversation.id, user.id, "assistant",
-                    self.CRISIS_RESPONSE, crisis_embedding
-                )
-                
-                logger.info(f"✅ Sent crisis response to {whatsapp_number}")
+                logger.info(f"✓ Sent crisis response to {whatsapp_number}")
                 
                 return {
                     "response": self.CRISIS_RESPONSE,
                     "is_crisis": True,
-                    "user_id": str(user.id)
+                    "user_id": str(user.id) if hasattr(user, 'id') else None
                 }
             
             # Normal therapeutic response flow
-            # Get or create conversation
-            conversation = get_active_conversation(db, user.id)
+            try:
+                conversation = get_active_conversation(db, user.id)
+            except Exception as e:
+                logger.warning(f"⚠️ Could not get conversation: {e}")
+                conversation = None
             
             # Retrieve conversation history
             try:
-                history_messages = get_conversation_history(db, conversation.id, limit=10)
-                conversation_history = [
-                    {"role": msg.role, "content": msg.content}
-                    for msg in history_messages
-                ]
+                if conversation:
+                    history_messages = get_conversation_history(db, conversation.id, limit=10)
+                    conversation_history = [
+                        {"role": msg.role, "content": msg.content}
+                        for msg in history_messages
+                    ]
+                else:
+                    conversation_history = []
+                logger.info(f"📚 Retrieved {len(conversation_history)} history messages")
             except Exception as e:
-                logger.error(f"❌ Error retrieving conversation history: {e}")
+                logger.warning(f"⚠️ Error retrieving conversation history: {e}")
                 conversation_history = []
             
             # Retrieve relevant context from knowledge base
@@ -148,7 +172,7 @@ I'm here to support you with digital wellness, but professional crisis counselor
                     user_message, relevant_contexts, conversation_history
                 )
             except Exception as e:
-                logger.error(f"❌ Error building prompt: {e}")
+                logger.warning(f"⚠️ Error building prompt: {e}")
                 # Fallback to simple prompt
                 prompt = f"You are a compassionate digital wellness therapist. User message: {user_message}"
             
@@ -190,37 +214,42 @@ I'm here to support you with digital wellness, but professional crisis counselor
                 logger.warning("⚠️ GPT-4 failed, using fallback response")
                 bot_response = self._get_fallback_response(user_message)
             
-            # Save user message
+            # Try to save messages to database
             try:
-                user_embedding = self.rag.create_embedding(user_message)
+                if conversation:
+                    # Save user message
+                    try:
+                        user_embedding = self.rag.create_embedding(user_message)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to create user message embedding: {e}")
+                        user_embedding = None
+                    
+                    save_message(
+                        db, conversation.id, user.id, "user",
+                        user_message, user_embedding
+                    )
+                    
+                    # Save bot response
+                    try:
+                        bot_embedding = self.rag.create_embedding(bot_response)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to create bot response embedding: {e}")
+                        bot_embedding = None
+                    
+                    save_message(
+                        db, conversation.id, user.id, "assistant",
+                        bot_response, bot_embedding
+                    )
             except Exception as e:
-                logger.error(f"❌ Failed to create user message embedding: {e}")
-                user_embedding = None
-            
-            save_message(
-                db, conversation.id, user.id, "user",
-                user_message, user_embedding
-            )
-            
-            # Save bot response
-            try:
-                bot_embedding = self.rag.create_embedding(bot_response)
-            except Exception as e:
-                logger.error(f"❌ Failed to create bot response embedding: {e}")
-                bot_embedding = None
-            
-            save_message(
-                db, conversation.id, user.id, "assistant",
-                bot_response, bot_embedding
-            )
+                logger.warning(f"⚠️ Could not save messages to database: {e}")
             
             elapsed_time = time.time() - start_time
-            logger.info(f"✅ Generated response for {whatsapp_number} in {elapsed_time:.2f}s")
+            logger.info(f"✓ Generated response for {whatsapp_number} in {elapsed_time:.2f}s")
             
             return {
                 "response": bot_response,
                 "is_crisis": False,
-                "user_id": str(user.id)
+                "user_id": str(user.id) if hasattr(user, 'id') else None
             }
         
         except Exception as e:
@@ -275,12 +304,6 @@ What's one small act of self-care you could do right now? 🌟"""
     def format_whatsapp_message(self, text: str) -> str:
         """Format message for WhatsApp (handle markdown, emojis, etc.)."""
         # WhatsApp supports basic markdown
-        # Bold: *text* or **text**
-        # Italic: _text_
-        # Strikethrough: ~text~
-        # Monospace: ```text```
-        
-        # Ensure proper formatting
         formatted = text.strip()
         
         # Add spacing for better readability
@@ -288,10 +311,8 @@ What's one small act of self-care you could do right now? 🌟"""
         
         return formatted
 
-
 # Singleton instance
 _chatbot_instance: Optional[TherapeuticChatbot] = None
-
 
 def get_chatbot() -> TherapeuticChatbot:
     """Get or create chatbot singleton instance."""
@@ -306,7 +327,6 @@ def get_chatbot() -> TherapeuticChatbot:
         logger.info("Chatbot instance created")
     
     return _chatbot_instance
-
 
 if __name__ == "__main__":
     logging.basicConfig(
