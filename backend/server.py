@@ -1,6 +1,7 @@
 """
 AWE Mental Health Chatbot - FastAPI Server
-Handles WhatsApp messaging with therapeutic AI responses
+Handles BOTH WhatsApp (Twilio) AND Web Chat messaging with therapeutic AI responses
+Multi-Channel Support: WhatsApp + Web Frontend
 """
 
 import os
@@ -30,11 +31,11 @@ logging.basicConfig(
     format='[%(asctime)s] %(levelname)s - %(message)s',
     datefmt='%H:%M:%S'
 )
+
 logger = logging.getLogger(__name__)
 
 # ===== DATABASE SETUP =====
 engine = get_database_engine()
-
 session_factory = sessionmaker(
     bind=engine,
     autoflush=False,
@@ -43,7 +44,6 @@ session_factory = sessionmaker(
 )
 
 set_engine_and_session(engine, session_factory)
-
 SessionLocal = session_factory
 
 # ===== TWILIO SETUP =====
@@ -53,7 +53,6 @@ TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238
 
 # Initialize Twilio client
 twilio_client = None
-
 if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
     twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     logger.info(f"✓ Twilio client initialized with number: {TWILIO_WHATSAPP_NUMBER}")
@@ -64,6 +63,7 @@ else:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup and shutdown events"""
+    
     # ===== STARTUP =====
     logger.info("🚀 Starting chatbot initialization...")
     
@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI):
         
         chatbot = TherapeuticChatbot(openai_api_key=openai_api_key)
         logger.info("✓ Chatbot initialized successfully")
+        
         app.state.chatbot = chatbot
         app.state.rag_system = rag_system
     except Exception as e:
@@ -103,14 +104,14 @@ async def lifespan(app: FastAPI):
         raise
     
     logger.info("""
-    
-╔══════════════════════════════════════════════════════════════╗
-║       WhatsApp Therapeutic Chatbot - Production MVP         ║
-║              Digital Wellness & Mental Health                ║
-╚══════════════════════════════════════════════════════════════╝
-    
+    ╔══════════════════════════════════════════════════════════════╗
+    ║   AWE Therapeutic Chatbot - Multi-Channel Production MVP   ║
+    ║         WhatsApp + Web Chat | Digital Wellness              ║
+    ╚══════════════════════════════════════════════════════════════╝
     """)
     logger.info("🎉 Chatbot startup complete and ready to serve!")
+    logger.info("📱 WhatsApp channel: ACTIVE")
+    logger.info("💻 Web chat channel: ACTIVE")
     
     yield
     
@@ -121,22 +122,35 @@ async def lifespan(app: FastAPI):
         logger.info("✓ Database connections closed")
     except Exception as e:
         logger.error(f"✗ Error during shutdown: {e}")
+    
     logger.info("👋 Shutdown complete")
 
 # ===== FASTAPI APP =====
 app = FastAPI(
-    title="AWE Mental Health Chatbot",
-    description="Therapeutic chatbot for digital wellness via WhatsApp",
+    title="AWE Mental Health Chatbot - Multi-Channel",
+    description="Therapeutic chatbot for digital wellness via WhatsApp and Web",
     version="1.0.0",
     lifespan=lifespan
 )
 
 # ===== CORS CONFIGURATION =====
-cors_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
+# Allow web frontend to connect
+cors_origins = [
+    "http://localhost:3000",              # Local dev
+    "http://localhost:3001",
+    "https://awedigitalwellness.com",     # Production
+    "https://www.awedigitalwellness.com",
+    "https://*.vercel.app",               # Vercel previews
+]
+
+# Also check environment variable
+env_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
+if env_origins:
+    cors_origins.extend(env_origins)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=cors_origins if cors_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -149,7 +163,8 @@ async def root():
     """Root endpoint - basic health check"""
     return {
         "status": "online",
-        "service": "WhatsApp Therapeutic Chatbot",
+        "service": "AWE Therapeutic Chatbot - Multi-Channel",
+        "channels": ["whatsapp", "web"],
         "version": "1.0.0",
         "timestamp": datetime.utcnow().isoformat()
     }
@@ -163,7 +178,11 @@ async def health():
         
         return {
             "status": "healthy",
-            "service": "WhatsApp Therapeutic Chatbot",
+            "service": "AWE Therapeutic Chatbot",
+            "channels": {
+                "whatsapp": "active" if twilio_client else "inactive",
+                "web": "active"
+            },
             "version": "1.0.0",
             "database": "connected",
             "timestamp": datetime.utcnow().isoformat()
@@ -178,10 +197,24 @@ async def status():
     return {
         "status": "operational",
         "service": "AWE Mental Health Chatbot",
+        "channels": {
+            "whatsapp": {
+                "status": "active" if twilio_client else "inactive",
+                "number": TWILIO_WHATSAPP_NUMBER if twilio_client else None
+            },
+            "web": {
+                "status": "active"
+            }
+        },
         "version": "1.0.0",
         "environment": os.getenv("ENVIRONMENT", "production"),
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CHANNEL 1: WhatsApp (Twilio) 
+# ═══════════════════════════════════════════════════════════════════
 
 @app.post("/api/whatsapp")
 async def whatsapp_webhook(request: Request):
@@ -194,7 +227,7 @@ async def whatsapp_webhook(request: Request):
         incoming_message = form_data.get("Body", "").strip()
         whatsapp_number = form_data.get("From", "")
         
-        logger.info(f"📱 Received message from {whatsapp_number}: {incoming_message}")
+        logger.info(f"📱 Received WhatsApp message from {whatsapp_number}: {incoming_message}")
         
         if not incoming_message:
             logger.warning("Empty message received")
@@ -213,7 +246,7 @@ async def whatsapp_webhook(request: Request):
             )
             
             response_text = response_dict.get("response", "")
-            logger.info(f"✓ Generated response: {response_text[:100]}...")
+            logger.info(f"✓ Generated WhatsApp response: {response_text[:100]}...")
             
             # Send response back via Twilio WhatsApp
             if twilio_client:
@@ -223,7 +256,8 @@ async def whatsapp_webhook(request: Request):
                         body=response_text,
                         to=whatsapp_number
                     )
-                    logger.info(f"✓ Message sent to {whatsapp_number} (SID: {message.sid})")
+                    
+                    logger.info(f"✓ WhatsApp message sent to {whatsapp_number} (SID: {message.sid})")
                     
                     return {
                         "status": "sent",
@@ -244,9 +278,9 @@ async def whatsapp_webhook(request: Request):
                     "message": response_text,
                     "note": "Twilio not configured"
                 }
-            
+        
         except Exception as e:
-            logger.error(f"✗ Error processing message: {e}")
+            logger.error(f"✗ Error processing WhatsApp message: {e}")
             
             # Send error message
             if twilio_client:
@@ -260,13 +294,97 @@ async def whatsapp_webhook(request: Request):
                     logger.error(f"✗ Failed to send error message: {send_error}")
             
             return {"status": "error", "detail": str(e)}
-        
         finally:
             db.close()
-            
+    
     except Exception as e:
-        logger.error(f"✗ Webhook error: {e}")
+        logger.error(f"✗ WhatsApp webhook error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CHANNEL 2: Web Chat
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/api/awe-chat")
+async def awe_chat(request: Request):
+    """
+    Web chat endpoint for React/Next.js frontend
+    Handles messages from the AWE Assistant webpage
+    
+    Request format:
+    {
+        "message": "user message text",
+        "history": [{"role": "user|assistant", "content": "..."}]
+    }
+    
+    Response format:
+    {
+        "reply": "bot response text",
+        "is_crisis": boolean,
+        "user_id": "web-timestamp"
+    }
+    """
+    try:
+        body = await request.json()
+        user_message = body.get("message", "").strip()
+        message_history = body.get("history", [])
+        
+        # Generate unique web user ID
+        user_id = f"web-{datetime.utcnow().timestamp()}"
+        
+        logger.info(f"💻 Received Web chat message: {user_message}")
+        
+        if not user_message:
+            return JSONResponse({
+                "reply": "Please enter a message.",
+                "error": True
+            }, status_code=400)
+        
+        # Process through chatbot (SAME chatbot as WhatsApp!)
+        db = SessionLocal()
+        try:
+            chatbot = app.state.chatbot
+            
+            # Generate response using web user prefix
+            response_dict = chatbot.generate_response(
+                db=db,
+                whatsapp_number=f"web:{user_id}",  # Prefix identifies web users
+                user_message=user_message
+            )
+            
+            response_text = response_dict.get("response", "")
+            is_crisis = response_dict.get("is_crisis", False)
+            
+            logger.info(f"✓ Generated Web chat response ({len(response_text)} chars)")
+            
+            # Return in format expected by frontend
+            return JSONResponse({
+                "reply": response_text,
+                "is_crisis": is_crisis,
+                "user_id": user_id
+            })
+        
+        except Exception as e:
+            logger.error(f"✗ Error processing web chat: {e}", exc_info=True)
+            return JSONResponse({
+                "reply": "I apologize, but I'm having trouble processing your message right now. Please try again in a moment.",
+                "error": True
+            }, status_code=500)
+        finally:
+            db.close()
+    
+    except Exception as e:
+        logger.error(f"✗ Web chat endpoint error: {e}", exc_info=True)
+        return JSONResponse({
+            "reply": "Sorry, something went wrong. Please try again.",
+            "error": True
+        }, status_code=500)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# TESTING & DEBUGGING ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
 
 @app.post("/api/test-message")
 async def test_message(message: dict):
@@ -278,20 +396,26 @@ async def test_message(message: dict):
         db = SessionLocal()
         try:
             chatbot = app.state.chatbot
+            
             response_dict = chatbot.generate_response(
                 db=db,
                 whatsapp_number=whatsapp_number,
                 user_message=user_message
             )
+            
             return {"response": response_dict.get("response", "")}
         finally:
             db.close()
-            
+    
     except Exception as e:
         logger.error(f"Test message error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ===== ERROR HANDLERS =====
+
+# ═══════════════════════════════════════════════════════════════════
+# ERROR HANDLERS
+# ═══════════════════════════════════════════════════════════════════
+
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Global exception handler"""
@@ -305,7 +429,11 @@ async def general_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# ===== RUN SERVER =====
+
+# ═══════════════════════════════════════════════════════════════════
+# RUN SERVER
+# ═══════════════════════════════════════════════════════════════════
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
