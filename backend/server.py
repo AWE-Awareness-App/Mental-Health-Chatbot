@@ -1,7 +1,7 @@
 """
 AWE Mental Health Chatbot - FastAPI Server
 Handles BOTH WhatsApp (Twilio) AND Web Chat messaging with therapeutic AI responses
-Multi-Channel Support: WhatsApp + Web Frontend
+Multi-Channel Support: WhatsApp + Web Frontend with Conversation Tracking
 """
 
 import os
@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+import uuid
 
 # Twilio for WhatsApp responses
 from twilio.rest import Client
@@ -203,7 +204,8 @@ async def status():
                 "number": TWILIO_WHATSAPP_NUMBER if twilio_client else None
             },
             "web": {
-                "status": "active"
+                "status": "active",
+                "endpoints": ["/api/webChat", "/api/awe-chat"]
             }
         },
         "version": "1.0.0",
@@ -213,7 +215,7 @@ async def status():
 
 
 # ═══════════════════════════════════════════════════════════════════
-# CHANNEL 1: WhatsApp (Twilio) 
+# CHANNEL 1: WhatsApp (Twilio)
 # ═══════════════════════════════════════════════════════════════════
 
 @app.post("/api/whatsapp")
@@ -303,14 +305,109 @@ async def whatsapp_webhook(request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# CHANNEL 2: Web Chat
+# CHANNEL 2: Web Chat with Conversation Tracking - PRIMARY ENDPOINT
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/api/webChat")
+async def web_chat_tracked(request: Request):
+    """
+    Enhanced web chat endpoint with conversation tracking
+    Matches frontend developer's requested format
+    
+    Request format:
+    {
+        "conversation_id": "uuid-or-null",
+        "message_index": 0,
+        "content": "user message text"
+    }
+    
+    Response format:
+    {
+        "conversation_id": "uuid",
+        "message_index": 1,
+        "content": "bot response text",
+        "is_crisis": boolean (optional)
+    }
+    """
+    try:
+        body = await request.json()
+        user_message = body.get("content", "").strip()
+        conversation_id = body.get("conversation_id")
+        message_index = body.get("message_index", 0)
+        
+        logger.info(f"💻 Web chat - Conv: {conversation_id}, Msg#{message_index}, Content: {user_message[:50]}...")
+        
+        if not user_message:
+            return JSONResponse({
+                "conversation_id": conversation_id,
+                "message_index": message_index + 1,
+                "content": "Please enter a message.",
+                "error": True
+            }, status_code=400)
+        
+        # Process through chatbot
+        db = SessionLocal()
+        try:
+            chatbot = app.state.chatbot
+            
+            # Generate or use existing conversation ID
+            if not conversation_id:
+                conversation_id = str(uuid.uuid4())
+                logger.info(f"✓ Created new conversation: {conversation_id}")
+            
+            # Use conversation_id as user identifier for web users
+            web_user_id = f"web:{conversation_id}"
+            
+            # Generate response
+            response_dict = chatbot.generate_response(
+                db=db,
+                whatsapp_number=web_user_id,
+                user_message=user_message
+            )
+            
+            response_text = response_dict.get("response", "")
+            is_crisis = response_dict.get("is_crisis", False)
+            
+            logger.info(f"✓ Web chat response - Conv: {conversation_id}, Msg#{message_index + 1}, Length: {len(response_text)} chars")
+            
+            # Return in requested format
+            return JSONResponse({
+                "conversation_id": conversation_id,
+                "message_index": message_index + 1,
+                "content": response_text,
+                "is_crisis": is_crisis
+            })
+        
+        except Exception as e:
+            logger.error(f"✗ Error processing web chat: {e}", exc_info=True)
+            return JSONResponse({
+                "conversation_id": conversation_id,
+                "message_index": message_index + 1,
+                "content": "I apologize, but I'm having trouble processing your message right now. Please try again in a moment.",
+                "error": True
+            }, status_code=500)
+        finally:
+            db.close()
+    
+    except Exception as e:
+        logger.error(f"✗ Web chat endpoint error: {e}", exc_info=True)
+        return JSONResponse({
+            "conversation_id": None,
+            "message_index": 0,
+            "content": "Sorry, something went wrong. Please try again.",
+            "error": True
+        }, status_code=500)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CHANNEL 2B: Alternative Web Chat Endpoint (Backward Compatible)
 # ═══════════════════════════════════════════════════════════════════
 
 @app.post("/api/awe-chat")
 async def awe_chat(request: Request):
     """
-    Web chat endpoint for React/Next.js frontend
-    Handles messages from the AWE Assistant webpage
+    Alternative web chat endpoint (backward compatible)
+    Simpler format without conversation tracking
     
     Request format:
     {
@@ -333,7 +430,7 @@ async def awe_chat(request: Request):
         # Generate unique web user ID
         user_id = f"web-{datetime.utcnow().timestamp()}"
         
-        logger.info(f"💻 Received Web chat message: {user_message}")
+        logger.info(f"💻 Web chat (simple) - Message: {user_message[:50]}...")
         
         if not user_message:
             return JSONResponse({
@@ -341,24 +438,22 @@ async def awe_chat(request: Request):
                 "error": True
             }, status_code=400)
         
-        # Process through chatbot (SAME chatbot as WhatsApp!)
+        # Process through chatbot
         db = SessionLocal()
         try:
             chatbot = app.state.chatbot
             
-            # Generate response using web user prefix
             response_dict = chatbot.generate_response(
                 db=db,
-                whatsapp_number=f"web:{user_id}",  # Prefix identifies web users
+                whatsapp_number=f"web:{user_id}",
                 user_message=user_message
             )
             
             response_text = response_dict.get("response", "")
             is_crisis = response_dict.get("is_crisis", False)
             
-            logger.info(f"✓ Generated Web chat response ({len(response_text)} chars)")
+            logger.info(f"✓ Web chat (simple) response - Length: {len(response_text)} chars")
             
-            # Return in format expected by frontend
             return JSONResponse({
                 "reply": response_text,
                 "is_crisis": is_crisis,
