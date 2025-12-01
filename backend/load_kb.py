@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 Therapeutic Knowledge Base Loader for Azure PostgreSQL
 Extracts PDFs, generates OpenAI embeddings, and loads into pgvector
@@ -11,7 +12,7 @@ import json
 import logging
 from pathlib import Path
 import psycopg2
-import openai
+from openai import OpenAI
 from datetime import datetime
 
 # Configure logging
@@ -25,6 +26,9 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.getenv('DATABASE_URL')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 KNOWLEDGE_BASE_PATH = Path(__file__).parent / 'knowledge_base'
+
+# Initialize OpenAI client (v1.0.0+ API)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Books metadata
 THERAPEUTIC_BOOKS = {
@@ -89,7 +93,7 @@ def extract_pdf_content(pdf_path):
     try:
         import PyPDF2
     except ImportError:
-        logger.warning("⚠️  PyPDF2 not installed. Install with: pip install PyPDF2")
+        logger.warning("⚠️ PyPDF2 not installed. Install with: pip install PyPDF2")
         return []
     
     text_content = []
@@ -119,13 +123,13 @@ def chunk_text(text, chunk_size=1000, overlap=200):
     return chunks
 
 def generate_embedding(text):
-    """Generate embedding using OpenAI's API"""
+    """Generate embedding using OpenAI's API (v1.0.0+)"""
     try:
-        response = openai.Embedding.create(
+        response = client.embeddings.create(
             input=text[:8191],
             model="text-embedding-3-small"
         )
-        embedding = response['data'][0]['embedding']
+        embedding = response.data[0].embedding
         return embedding
     except Exception as e:
         logger.error(f"❌ Embedding generation failed: {e}")
@@ -141,7 +145,7 @@ def load_knowledge_base(conn):
         pdf_path = KNOWLEDGE_BASE_PATH / pdf_file
         
         if not pdf_path.exists():
-            logger.warning(f"⚠️  PDF not found: {pdf_path}")
+            logger.warning(f"⚠️ PDF not found: {pdf_path}")
             continue
         
         logger.info(f"\n📖 Processing: {metadata['title']}")
@@ -149,7 +153,7 @@ def load_knowledge_base(conn):
         
         pages = extract_pdf_content(pdf_path)
         if not pages:
-            logger.warning(f"⚠️  Could not extract content from {pdf_file}")
+            logger.warning(f"⚠️ Could not extract content from {pdf_file}")
             continue
         
         all_text = '\n\n'.join([p['text'] for p in pages])
@@ -164,7 +168,7 @@ def load_knowledge_base(conn):
             try:
                 embedding = generate_embedding(chunk)
                 if not embedding:
-                    logger.warning(f"   ⚠️  Failed to generate embedding for chunk {i}")
+                    logger.warning(f"   ⚠️ Failed to generate embedding for chunk {i}")
                     continue
                 
                 doc_metadata = {
@@ -216,7 +220,7 @@ def verify_load(conn):
     cur = conn.cursor()
     try:
         cur.execute("SELECT COUNT(*) FROM knowledge_documents")
-        count = cur.fetchone()
+        count = cur.fetchone()[0]
         logger.info(f"\n✅ Database verification: {count} documents in knowledge base")
         
         cur.execute("""
@@ -249,7 +253,6 @@ def main():
         logger.error("❌ Missing OPENAI_API_KEY environment variable")
         sys.exit(1)
     
-    openai.api_key = OPENAI_API_KEY
     conn = get_db_connection()
     
     try:
@@ -265,11 +268,12 @@ def main():
             logger.info("   RAG system is active with real embeddings.")
             logger.info("="*70 + "\n")
         else:
-            logger.warning("\n⚠️  No documents were loaded. Check the logs above.")
-        
+            logger.warning("\n⚠️ No documents were loaded. Check the logs above.")
+    
     except Exception as e:
         logger.error(f"\n❌ Fatal error: {e}")
         sys.exit(1)
+    
     finally:
         conn.close()
         logger.info("✅ Database connection closed")
