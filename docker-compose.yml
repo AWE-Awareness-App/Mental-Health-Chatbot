@@ -1,3 +1,5 @@
+# Updated docker-compose.yml with KB Loader Service
+
 version: '3.8'
 
 services:
@@ -19,6 +21,27 @@ services:
       timeout: 5s
       retries: 5
 
+  # NEW: Knowledge Base Loader Service
+  kb-loader:
+    image: python:3.11-slim
+    container_name: awe_kb_loader
+    working_dir: /app
+    volumes:
+      - ./backend:/app/backend
+      - ./knowledge_base:/app/knowledge_base
+    environment:
+      DATABASE_URL: postgresql://chatbot_user:chatbot_pass@postgres:5432/therapy_chatbot
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PYTHONUNBUFFERED: 1
+    command: >
+      sh -c "
+      pip install --no-cache-dir psycopg2-binary openai PyPDF2 &&
+      python3 backend/load_kb.py
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build:
       context: ./backend
@@ -38,7 +61,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-      - ./backend/knowledge_base:/app/knowledge_base
+      - ./knowledge_base:/app/knowledge_base
     command: uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 
 volumes:

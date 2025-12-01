@@ -125,7 +125,7 @@ def generate_embedding(text):
             input=text[:8191],
             model="text-embedding-3-small"
         )
-        embedding = response['data']['embedding']
+        embedding = response['data'][0]['embedding']
         return embedding
     except Exception as e:
         logger.error(f"❌ Embedding generation failed: {e}")
