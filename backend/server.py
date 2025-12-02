@@ -1,18 +1,18 @@
 """
 AWE Mental Health Chatbot - FastAPI Server
 
-Handles BOTH WhatsApp (Twilio) AND Web Chat messaging  
+Handles BOTH WhatsApp (Twilio) AND Web Chat messaging
 with therapeutic AI responses
 
-Multi-Channel Support: WhatsApp + Web Frontend  
+Multi-Channel Support: WhatsApp + Web Frontend
 with Conversation Tracking
 """
 
 import os
 import logging
+import uuid
 from datetime import datetime
 from contextlib import asynccontextmanager
-import uuid
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -25,6 +25,7 @@ from twilio.request_validator import RequestValidator
 # Database setup
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
+
 from database_aad import get_database_engine
 from database import Base, set_engine_and_session
 
@@ -32,7 +33,9 @@ from database import Base, set_engine_and_session
 from chatbot import TherapeuticChatbot
 from rag_system_v2 import TherapeuticRAG
 
-# Logging Configuration
+# --------------------------------------------------------------
+# LOGGING CONFIGURATION
+# --------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)s - %(message)s',
@@ -40,11 +43,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ==============================================================
+# --------------------------------------------------------------
 # DATABASE SETUP
-# ==============================================================
+# --------------------------------------------------------------
 engine = get_database_engine()
-
 session_factory = sessionmaker(
     bind=engine,
     autoflush=False,
@@ -55,12 +57,12 @@ session_factory = sessionmaker(
 set_engine_and_session(engine, session_factory)
 SessionLocal = session_factory
 
-# ==============================================================
+# --------------------------------------------------------------
 # TWILIO SETUP
-# ==============================================================
+# --------------------------------------------------------------
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 
 twilio_client = None
 twilio_validator = None
@@ -72,9 +74,9 @@ if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
 else:
     logger.warning("⚠️ Twilio credentials not set - WhatsApp responses will not be sent")
 
-# ==============================================================
+# --------------------------------------------------------------
 # APPLICATION LIFESPAN: STARTUP & SHUTDOWN
-# ==============================================================
+# --------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI startup and shutdown lifecycle"""
@@ -93,15 +95,17 @@ async def lifespan(app: FastAPI):
         raise
 
     # RAG Initialization
+    rag_system = None
     try:
         logger.info("📚 Initializing knowledge base (RAG system)...")
         openai_api_key = os.getenv("OPENAI_API_KEY")
+
         if not openai_api_key:
             logger.warning("⚠️ OPENAI_API_KEY not set - RAG system will not be initialized")
-            rag_system = None
         else:
             rag_system = TherapeuticRAG(openai_api_key=openai_api_key)
             logger.info("✓ Knowledge base initialized")
+
     except Exception as e:
         logger.warning(f"⚠️ RAG system initialization failed: {e}")
         rag_system = None
@@ -110,11 +114,15 @@ async def lifespan(app: FastAPI):
     try:
         logger.info("🤖 Initializing therapeutic chatbot...")
         openai_api_key = os.getenv("OPENAI_API_KEY")
+
         if not openai_api_key:
             logger.error("✗ OPENAI_API_KEY not set!")
             raise ValueError("OPENAI_API_KEY is required")
 
-        chatbot = TherapeuticChatbot(openai_api_key=openai_api_key)
+        chatbot = TherapeuticChatbot(
+            openai_api_key=openai_api_key,
+            rag_system=rag_system
+        )
 
         app.state.chatbot = chatbot
         app.state.rag_system = rag_system
@@ -128,8 +136,8 @@ async def lifespan(app: FastAPI):
     # Startup banner
     logger.info("""
 ╔══════════════════════════════════════════════════════════════╗
-║   AWE Therapeutic Chatbot - Multi-Channel Production MVP     ║
-║      WhatsApp + Web Chat | Digital Wellness Support          ║
+║      AWE Therapeutic Chatbot - Multi-Channel Production MVP   ║
+║          WhatsApp + Web Chat | Digital Wellness Support       ║
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
@@ -150,9 +158,9 @@ async def lifespan(app: FastAPI):
 
     logger.info("👋 Shutdown complete")
 
-# ==============================================================
+# --------------------------------------------------------------
 # FASTAPI INSTANCE
-# ==============================================================
+# --------------------------------------------------------------
 app = FastAPI(
     title="AWE Mental Health Chatbot - Multi-Channel",
     description="Therapeutic chatbot for digital wellness via WhatsApp and Web",
@@ -160,9 +168,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# ==============================================================
+# --------------------------------------------------------------
 # CORS CONFIGURATION
-# ==============================================================
+# --------------------------------------------------------------
 cors_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
@@ -183,9 +191,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==============================================================
+# --------------------------------------------------------------
 # BASIC ROUTES
-# ==============================================================
+# --------------------------------------------------------------
 @app.get("/")
 async def root():
     return {
@@ -240,17 +248,15 @@ async def status():
         "timestamp": datetime.utcnow().isoformat()
     }
 
-# ==============================================================
-# CHANNEL 1: WHATSAPP
-# ==============================================================
+# --------------------------------------------------------------
+# CHANNEL 1: WHATSAPP CHATBOT
+# --------------------------------------------------------------
 @app.post("/api/whatsapp")
 async def whatsapp_webhook(request: Request):
-    """
-    WhatsApp webhook endpoint for Twilio.
-    """
+    """WhatsApp webhook endpoint for Twilio."""
+
     try:
         form_data = await request.form()
-
         incoming_message = form_data.get("Body", "").strip()
         whatsapp_number = form_data.get("From", "")
 
@@ -258,7 +264,6 @@ async def whatsapp_webhook(request: Request):
 
         # Validate Twilio request signature
         request_url = str(request.url)
-
         is_valid_twilio = twilio_validator.validate(
             request_url,
             form_data,
@@ -278,7 +283,6 @@ async def whatsapp_webhook(request: Request):
 
         try:
             chatbot = app.state.chatbot
-
             response_dict = chatbot.generate_response(
                 db=db,
                 whatsapp_number=whatsapp_number,
@@ -295,6 +299,7 @@ async def whatsapp_webhook(request: Request):
                         body=response_text,
                         to=whatsapp_number
                     )
+
                     logger.info(f"✓ WhatsApp message sent (SID: {message.sid})")
 
                     return {
@@ -305,6 +310,7 @@ async def whatsapp_webhook(request: Request):
 
                 except Exception as e:
                     logger.error(f"✗ Failed to send via Twilio: {e}")
+
                     return {
                         "status": "error",
                         "message": "Failed to send response",
@@ -313,6 +319,7 @@ async def whatsapp_webhook(request: Request):
 
             # If Twilio not configured
             logger.warning("⚠️ Twilio not configured")
+
             return {
                 "status": "processed",
                 "message": response_text,
@@ -325,7 +332,7 @@ async def whatsapp_webhook(request: Request):
             if twilio_client:
                 try:
                     twilio_client.messages.create(
-                        from_=TWILIO_WHATSAPP_NUMBER,
+                        from_=TWILILIO_WHATSAPP_NUMBER,
                         body=(
                             "I apologize, but I'm having technical issues.\n"
                             "If you're in crisis, please contact:\n"
@@ -346,14 +353,13 @@ async def whatsapp_webhook(request: Request):
         logger.error(f"✗ WhatsApp webhook error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==============================================================
-# CHANNEL 2: WEB CHAT (PRIMARY)
-# ==============================================================
+# --------------------------------------------------------------
+# CHANNEL 2: PRIMARY WEB CHAT (WITH CONVERSATION TRACKING)
+# --------------------------------------------------------------
 @app.post("/api/webChat")
 async def web_chat_tracked(request: Request):
-    """
-    Enhanced web chat with conversation tracking.
-    """
+    """Enhanced web chat with conversation tracking."""
+
     try:
         body = await request.json()
         user_message = body.get("content", "").strip()
@@ -378,6 +384,7 @@ async def web_chat_tracked(request: Request):
         try:
             chatbot = app.state.chatbot
 
+            # If new conversation
             if not conversation_id:
                 conversation_id = str(uuid.uuid4())
                 logger.info(f"✓ New conversation created: {conversation_id}")
@@ -428,23 +435,25 @@ async def web_chat_tracked(request: Request):
             "error": True
         }, status_code=500)
 
-# ==============================================================
+# --------------------------------------------------------------
 # CHANNEL 2B: SIMPLE WEB CHAT (BACKWARD COMPATIBLE)
-# ==============================================================
+# --------------------------------------------------------------
 @app.post("/api/awe-chat")
 async def awe_chat(request: Request):
-    """
-    Simple web chat endpoint without conversation tracking.
-    """
+    """Simple web chat endpoint without conversation tracking."""
+
     try:
         body = await request.json()
         user_message = body.get("message", "").strip()
-
         user_id = f"web-{datetime.utcnow().timestamp()}"
+
         logger.info(f"💻 Simple chat - Message: {user_message[:50]}...")
 
         if not user_message:
-            return JSONResponse({"reply": "Please enter a message.", "error": True}, status_code=400)
+            return JSONResponse(
+                {"reply": "Please enter a message.", "error": True},
+                status_code=400
+            )
 
         db = SessionLocal()
 
@@ -485,12 +494,13 @@ async def awe_chat(request: Request):
             "error": True
         }, status_code=500)
 
-# ==============================================================
+# --------------------------------------------------------------
 # TESTING ENDPOINT
-# ==============================================================
+# --------------------------------------------------------------
 @app.post("/api/test-message")
 async def test_message(message: dict):
     """Quick testing endpoint"""
+
     try:
         user_message = message.get("message", "")
         whatsapp_number = message.get("phone", "test")
@@ -504,6 +514,7 @@ async def test_message(message: dict):
                 whatsapp_number=whatsapp_number,
                 user_message=user_message
             )
+
             return {"response": response_dict.get("response", "")}
 
         finally:
@@ -513,12 +524,13 @@ async def test_message(message: dict):
         logger.error(f"Test message error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==============================================================
+# --------------------------------------------------------------
 # ERROR HANDLER
-# ==============================================================
+# --------------------------------------------------------------
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}")
+
     return JSONResponse(
         status_code=500,
         content={
@@ -528,9 +540,9 @@ async def general_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# ==============================================================
+# --------------------------------------------------------------
 # RUN SERVER
-# ==============================================================
+# --------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
 
