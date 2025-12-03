@@ -7,6 +7,7 @@ ENHANCEMENTS:
 - Citability support with source tracking
 - Robust error handling with graceful degradation
 - Detailed logging and metrics
+- pgvector fallback for compatibility
 """
 
 import os
@@ -242,10 +243,24 @@ class TherapeuticRAG:
                 logger.error("❌ Failed to create query embedding")
                 return []
             
-            # Search for similar documents using pgvector
-            results = db.query(KnowledgeDocument).order_by(
-                KnowledgeDocument.embedding.cosine_distance(query_embedding)
-            ).limit(k).all()
+            # Try pgvector cosine distance first (PostgreSQL with pgvector extension)
+            try:
+                results = db.query(KnowledgeDocument).order_by(
+                    KnowledgeDocument.embedding.cosine_distance(query_embedding)
+                ).limit(k).all()
+                
+                logger.info(f"✅ Retrieved {len(results)} results using pgvector")
+                
+            except Exception as pgvector_error:
+                logger.warning(f"⚠️ pgvector not available: {pgvector_error}")
+                logger.info("📌 Falling back to basic retrieval (first k documents)")
+                
+                # Fallback: just get first k documents (no semantic search)
+                results = db.query(KnowledgeDocument).limit(k).all()
+                
+                if not results:
+                    logger.warning("⚠️ No documents found in knowledge base")
+                    return []
             
             # Extract content and metadata for citations
             contexts_with_sources = []
