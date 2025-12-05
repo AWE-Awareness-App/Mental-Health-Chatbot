@@ -4,8 +4,10 @@ trigger:
     include:
       - '*'       # Monitor all branches
 
+
 # Only allow manual triggers for non-master branches
 pr: none
+
 
 # Define stages for build and deploy
 stages:
@@ -28,6 +30,7 @@ stages:
               tags: |
                 $(Build.SourceBranchName)-$(Build.BuildId)
                 $(Build.SourceBranchName)-latest
+
 
   - stage: Deploy
     displayName: 'Deploy to Production'
@@ -68,16 +71,14 @@ stages:
                       
                       echo "Setting app settings from chatbot-mvp library..."
                       
-                      # Set all environment variables from the library
+                      # Set ONLY non-secret environment variables from the library
+                      # CRITICAL: Twilio credentials are managed in Azure Portal, NOT here
                       az webapp config appsettings set \
                         --name $(webAppName) \
                         --resource-group $(resourceGroup) \
                         --settings \
                         DATABASE_URL=$(DATABASE_URL) \
                         OPENAI_API_KEY=$(OPENAI_API_KEY) \
-                        TWILIO_ACCOUNT_SID=$(TWILIO_ACCOUNT_SID) \
-                        TWILIO_AUTH_TOKEN=$(TWILIO_AUTH_TOKEN) \
-                        TWILIO_WHATSAPP_NUMBER=$(TWILIO_WHATSAPP_NUMBER) \
                         CORS_ORIGINS=$(CORS_ORIGINS) \
                         LOG_LEVEL=$(LOG_LEVEL)
                       
@@ -85,6 +86,8 @@ stages:
                       az webapp restart --name $(webAppName) --resource-group $(resourceGroup)
                       
                       echo "Deployment complete!"
+                      echo "✓ Twilio credentials are preserved from Azure Portal"
+
 
 variables:
   - group: 'chatbot-mvp'  
