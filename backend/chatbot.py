@@ -41,7 +41,8 @@ from database import (
     get_or_create_user,
     get_active_conversation,
     save_message,
-    get_conversation_history
+    get_conversation_history,
+    aichatusers
 )
 
 logger = logging.getLogger(__name__)

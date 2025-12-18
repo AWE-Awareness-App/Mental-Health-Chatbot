@@ -1,6 +1,9 @@
 """
 Database models and configuration for PostgreSQL with pgvector.
+
 Handles user management, conversation history, and message storage.
+
+UPDATED: Uses aichatusers table instead of User table.
 """
 
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, Float, Boolean
@@ -12,12 +15,15 @@ import uuid
 import os
 from pgvector.sqlalchemy import Vector
 
+
 # Base class for models
 Base = declarative_base()
+
 
 # Global references for engine and SessionLocal (set by server.py)
 engine = None
 SessionLocal = None
+
 
 def set_engine_and_session(engine_instance, session_factory):
     """Set engine and session factory from server.py"""
@@ -26,9 +32,9 @@ def set_engine_and_session(engine_instance, session_factory):
     SessionLocal = session_factory
 
 
-class User(Base):
+class aichatusers(Base):
     """User model for tracking WhatsApp users."""
-    __tablename__ = "users"
+    __tablename__ = "aichatusers"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     whatsapp_number = Column(String(50), unique=True, nullable=False, index=True)
@@ -41,7 +47,11 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     def __repr__(self):
-        return f"<User {self.whatsapp_number}>"
+        return f"<aichatusers {self.whatsapp_number}>"
+
+
+# Backward compatibility alias
+User = aichatusers
 
 
 class Conversation(Base):
@@ -111,10 +121,10 @@ def get_db():
 
 # Utility functions for database operations
 def get_or_create_user(db, whatsapp_number: str):
-    """Get existing user or create new one."""
-    user = db.query(User).filter(User.whatsapp_number == whatsapp_number).first()
+    """Get existing user or create new one. FIXED: Now queries aichatusers table."""
+    user = db.query(aichatusers).filter(aichatusers.whatsapp_number == whatsapp_number).first()
     if not user:
-        user = User(whatsapp_number=whatsapp_number)
+        user = aichatusers(whatsapp_number=whatsapp_number)
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -171,7 +181,7 @@ def get_conversation_history(db, conversation_id: uuid.UUID, limit: int = 10):
         Message.conversation_id == conversation_id
     ).order_by(Message.timestamp.desc()).limit(limit).all()
     
-    return list(reversed(messages))  # Return in chronological order
+    return list(reversed(messages))  # Returns in chronological order
 
 
 def search_similar_messages(db, embedding, limit: int = 5):
@@ -188,3 +198,4 @@ if __name__ == "__main__":
     print("Initializing database...")
     init_db()
     print("Database ready!")
+
