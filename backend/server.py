@@ -1,39 +1,47 @@
 """
 AWE Mental Health Chatbot - FastAPI Server
 
+
 Handles BOTH WhatsApp (Twilio) AND Web Chat messaging
 with therapeutic AI responses
+
 
 Multi-Channel Support: WhatsApp + Web Frontend
 with Conversation Tracking
 """
 
+
 import os
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text, extract
+
 
 # Twilio for WhatsApp
 from twilio.rest import Client
 from twilio.request_validator import RequestValidator
 
+
 # Database setup
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text
 from database_aad import get_database_engine
 from database import Base, set_engine_and_session
+
 
 # Chatbot + RAG
 from chatbot import TherapeuticChatbot
 from rag_system_v2 import TherapeuticRAG
 
+
 # ======================================================================
 # LOGGING CONFIGURATION
 # ======================================================================
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,13 +49,17 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 
+
 logger = logging.getLogger(__name__)
+
 
 # ======================================================================
 # DATABASE SETUP
 # ======================================================================
 
+
 engine = get_database_engine()
+
 
 session_factory = sessionmaker(
     bind=engine,
@@ -56,20 +68,26 @@ session_factory = sessionmaker(
     expire_on_commit=False
 )
 
+
 set_engine_and_session(engine, session_factory)
 
+
 SessionLocal = session_factory
+
 
 # ======================================================================
 # TWILIO SETUP
 # ======================================================================
 
+
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 
+
 twilio_client = None
 twilio_validator = None
+
 
 if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
     twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
@@ -78,9 +96,11 @@ if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
 else:
     logger.warning("⚠️ Twilio credentials not set - WhatsApp responses will not be sent")
 
+
 # ======================================================================
 # APPLICATION LIFESPAN: STARTUP & SHUTDOWN
 # ======================================================================
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -156,9 +176,11 @@ async def lifespan(app: FastAPI):
     
     logger.info("👋 Shutdown complete")
 
+
 # ======================================================================
 # FASTAPI INSTANCE
 # ======================================================================
+
 
 app = FastAPI(
     title="AWE Mental Health Chatbot - Multi-Channel",
@@ -167,9 +189,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+
 # ======================================================================
 # CORS CONFIGURATION
 # ======================================================================
+
 
 cors_origins = [
     "http://localhost:3000",
@@ -179,9 +203,11 @@ cors_origins = [
     "https://*.vercel.app",
 ]
 
+
 env_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
 if env_origins:
     cors_origins.extend(env_origins)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -191,9 +217,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ======================================================================
 # BASIC ROUTES
 # ======================================================================
+
 
 @app.get("/")
 async def root():
@@ -204,6 +232,7 @@ async def root():
         "version": "1.0.0",
         "timestamp": datetime.utcnow().isoformat()
     }
+
 
 @app.get("/api/health")
 async def health():
@@ -225,6 +254,7 @@ async def health():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=500, detail="Database connection failed")
 
+
 @app.get("/api/status")
 async def status():
     return {
@@ -245,9 +275,11 @@ async def status():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+
 # ======================================================================
 # CHANNEL 1: WHATSAPP CHATBOT 
 # ======================================================================
+
 
 @app.post("/api/whatsapp")
 async def whatsapp_webhook(request: Request):
@@ -261,8 +293,7 @@ async def whatsapp_webhook(request: Request):
         
         logger.info(f"📱 Received WhatsApp message from {whatsapp_number}: {incoming_message}")
         
-        # Skip signature validation (Twilio validator has bug with integer params)
-        # If you NEED validation later, we'll use a different approach
+        # Skipping signature validation (Twilio validator has bug with integer params)
         
         if not incoming_message:
             return {"status": "processed"}
@@ -336,9 +367,11 @@ async def whatsapp_webhook(request: Request):
         logger.error(f"✗ WhatsApp webhook error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ======================================================================
 # WHATSAPP STATUS WEBHOOK - HANDLES DELIVERY CONFIRMATIONS
 # ======================================================================
+
 
 @app.post("/api/whatsapp/status")
 async def whatsapp_status_webhook(request: Request):
@@ -356,9 +389,11 @@ async def whatsapp_status_webhook(request: Request):
         logger.error(f"Error in status webhook: {e}")
         return {"status": "error"}
 
+
 # ======================================================================
 # CHANNEL 2: PRIMARY WEB CHAT (WITH CONVERSATION TRACKING)
 # ======================================================================
+
 
 @app.post("/api/webChat")
 async def web_chat_tracked(request: Request):
@@ -437,9 +472,11 @@ async def web_chat_tracked(request: Request):
             "error": True
         }, status_code=500)
 
+
 # ======================================================================
 # CHANNEL 2B: SIMPLE WEB CHAT (BACKWARD COMPATIBLE)
 # ======================================================================
+
 
 @app.post("/api/awe-chat")
 async def awe_chat(request: Request):
@@ -494,9 +531,11 @@ async def awe_chat(request: Request):
             "error": True
         }, status_code=500)
 
+
 # ======================================================================
 # TESTING ENDPOINT
 # ======================================================================
+
 
 @app.post("/api/test-message")
 async def test_message(message: dict):
@@ -525,9 +564,220 @@ async def test_message(message: dict):
         logger.error(f"Test message error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ======================================================================
+# LIVE DASHBOARD WITH API KEY PROTECTION
+# ======================================================================
+# Real-time dashboard + 5 API endpoints + Key-based security
+
+DASHBOARD_SECRET_KEY = "AWE-LUMI@2025!Logs"  
+
+# Dashboard serving endpoint (HTML page with key protection)
+@app.get("/dashboard")
+async def serve_dashboard(key: str = None):
+    """
+    Serve dashboard HTML with API key protection
+    Access: http://yourdomain.com/dashboard?key=YOUR-SECRET-KEY
+    """
+    if key != DASHBOARD_SECRET_KEY:
+        return {
+            "error": "Invalid or missing API key",
+            "message": "Access denied"
+        }, 403
+    
+    try:
+        with open("dashboard.html", "r") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return {"error": "Dashboard file not found"}, 404
+
+
+# API endpoint 1: Get all dashboard metrics
+@app.get("/api/dashboard/metrics")
+async def get_dashboard_metrics():
+    """
+    Get all dashboard metrics from database
+    Returns: WhatsApp users, Web users, Total users, Messages, Crisis alerts, Active today
+    """
+    db = SessionLocal()
+    try:
+        from database import aichatusers, Message
+        
+        whatsapp_count = db.query(aichatusers).filter(
+            aichatusers.whatsapp_number.isnot(None)
+        ).count()
+        
+        total_count = db.query(aichatusers).count()
+        web_count = total_count - whatsapp_count
+        
+        total_messages = db.query(Message).count()
+        
+        crisis_count = db.query(aichatusers).filter(
+            aichatusers.crisis_flag == True
+        ).count()
+        
+        active_today = db.query(aichatusers).filter(
+            aichatusers.last_interaction > datetime.utcnow() - timedelta(hours=24)
+        ).count()
+        
+        return {
+            'whatsapp_users': whatsapp_count,
+            'web_users': web_count,
+            'total_users': total_count,
+            'total_messages': total_messages,
+            'crisis_alerts': crisis_count,
+            'active_today': active_today,
+            'last_updated': datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching dashboard metrics: {e}")
+        return {'error': str(e)}, 500
+    finally:
+        db.close()
+
+
+# API endpoint 2: Get 30-day user growth
+@app.get("/api/dashboard/growth")
+async def get_user_growth():
+    """
+    Get 30-day user growth data
+    Returns: Daily cumulative user count for trend analysis
+    """
+    db = SessionLocal()
+    try:
+        from database import aichatusers
+        
+        growth_data = []
+        
+        for i in range(30, -1, -1):
+            date = datetime.utcnow() - timedelta(days=i)
+            date_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+            count = db.query(aichatusers).filter(
+                aichatusers.created_at <= date_start
+            ).count()
+            growth_data.append({
+                'date': date_start.strftime('%b %d'),
+                'users': count
+            })
+        
+        return {'data': growth_data}
+    except Exception as e:
+        logger.error(f"Error fetching growth data: {e}")
+        return {'error': str(e)}, 500
+    finally:
+        db.close()
+
+
+# API endpoint 3: Get crisis alerts by day of week
+@app.get("/api/dashboard/crisis-by-day")
+async def get_crisis_by_day():
+    """
+    Get crisis alerts grouped by day of week
+    Returns: Crisis count for each day (Monday-Sunday)
+    """
+    db = SessionLocal()
+    try:
+        from database import Message
+        
+        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        crisis_by_day = {}
+        
+        for day_num, day_name in enumerate(days):
+            count = db.query(Message).filter(
+                Message.contains_crisis_keywords == True,
+                extract('dow', Message.timestamp) == day_num
+            ).count()
+            crisis_by_day[day_name] = count
+        
+        return {'crisis_by_day': crisis_by_day}
+    except Exception as e:
+        logger.error(f"Error fetching crisis data: {e}")
+        return {'error': str(e)}, 500
+    finally:
+        db.close()
+
+
+# API endpoint 4: Get WhatsApp vs Web distribution
+@app.get("/api/dashboard/source-distribution")
+async def get_source_distribution():
+    """
+    Get user distribution by source (WhatsApp vs Web)
+    Returns: Percentage and count breakdown
+    """
+    db = SessionLocal()
+    try:
+        from database import aichatusers
+        
+        whatsapp_count = db.query(aichatusers).filter(
+            aichatusers.whatsapp_number.isnot(None)
+        ).count()
+        
+        total_count = db.query(aichatusers).count()
+        web_count = total_count - whatsapp_count
+        
+        if total_count == 0:
+            return {
+                'whatsapp_percent': 0,
+                'web_percent': 0,
+                'whatsapp_count': 0,
+                'web_count': 0
+            }
+        
+        return {
+            'whatsapp_percent': round((whatsapp_count / total_count) * 100, 1),
+            'web_percent': round((web_count / total_count) * 100, 1),
+            'whatsapp_count': whatsapp_count,
+            'web_count': web_count
+        }
+    except Exception as e:
+        logger.error(f"Error fetching source distribution: {e}")
+        return {'error': str(e)}, 500
+    finally:
+        db.close()
+
+
+# API endpoint 5: Get active users (last 7 days)
+@app.get("/api/dashboard/active-users")
+async def get_active_users():
+    """
+    Get active users for each day (last 7 days)
+    Returns: Number of unique active users per day
+    """
+    db = SessionLocal()
+    try:
+        from database import aichatusers
+        
+        active_data = []
+        days_short = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        
+        for i in range(6, -1, -1):
+            date = datetime.utcnow() - timedelta(days=i)
+            date_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+            date_end = date_start + timedelta(hours=24)
+            
+            count = db.query(aichatusers).filter(
+                aichatusers.last_interaction >= date_start,
+                aichatusers.last_interaction < date_end
+            ).count()
+            
+            day_name = days_short[date_start.weekday()]
+            active_data.append({
+                'day': day_name,
+                'users': count
+            })
+        
+        return {'data': active_data}
+    except Exception as e:
+        logger.error(f"Error fetching active users: {e}")
+        return {'error': str(e)}, 500
+    finally:
+        db.close()
+
+
 # ======================================================================
 # ERROR HANDLER
 # ======================================================================
+
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
@@ -541,9 +791,11 @@ async def general_exception_handler(request: Request, exc: Exception):
         }
     )
 
+
 # ======================================================================
 # RUN SERVER
 # ======================================================================
+
 
 if __name__ == "__main__":
     import uvicorn
