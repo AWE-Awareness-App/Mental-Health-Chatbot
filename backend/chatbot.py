@@ -25,6 +25,7 @@ Enhancements:
 - LUMI identity (AI, not therapist, not human)
 - Seven Paladins for reframing negative situations
 - Professional escalation for serious mental health topics
+- source_channel tracking (WhatsApp vs Web users)
 """
 
 import os
@@ -226,7 +227,6 @@ REFERRAL_KEYWORDS = [
     "suicidal", "self harm", "self-harm", "professional help", "need help", "serious"
 ]
 
-
 class TherapeuticChatbot:
     """Main chatbot class for handling therapeutic conversations."""
 
@@ -336,31 +336,47 @@ class TherapeuticChatbot:
         return False
 
     # -------------------------------------------------------------------------
-    # User Handling (Safe Mode)
+    # User Handling (Safe Mode) - UPDATED WITH source_channel
     # -------------------------------------------------------------------------
 
     def _get_or_create_user_safe(self, db: Session, whatsapp_number: str):
         """
-        Safely retrieve or create a user object.
+        Safely retrieve or create a user object with source_channel tracking.
         Avoids breaking when DB columns are missing.
+        Sets source_channel to 'whatsapp' or 'web' based on whatsapp_number format.
 
         Returns:
             User object, or a fallback MinimalUser object if DB query fails.
         """
         try:
+            # Determine source_channel based on whatsapp_number format
+            source_channel = 'web' if whatsapp_number.startswith('web:') else 'whatsapp'
+            
+            # Try to get or create user
             user = get_or_create_user(db, whatsapp_number)
-            logger.info(f"✓ User retrieved/created: {whatsapp_number}")
+            
+            # If user exists but source_channel is not set, update it
+            try:
+                if hasattr(user, 'source_channel') and (user.source_channel is None or user.source_channel == 'whatsapp'):
+                    user.source_channel = source_channel
+                    db.commit()
+                    logger.info(f"✓ Set source_channel to '{source_channel}' for {whatsapp_number}")
+            except Exception as update_error:
+                logger.warning(f"⚠️ Could not update source_channel: {update_error}")
+            
+            logger.info(f"✓ User retrieved/created: {whatsapp_number} (source: {source_channel})")
             return user
 
         except Exception as e:
             logger.warning(f"⚠️ Could not get/create user: {e}")
 
-            # Fallback minimal user representation
+            # Fallback minimal user representation with source_channel
             class MinimalUser:
                 def __init__(self, phone):
                     self.id = hash(phone)
                     self.whatsapp_number = phone
                     self.crisis_flag = False
+                    self.source_channel = 'web' if phone.startswith('web:') else 'whatsapp'
 
             return MinimalUser(whatsapp_number)
 
@@ -384,7 +400,7 @@ class TherapeuticChatbot:
 
         try:
             # -------------------------
-            # 1. Get User (Safe)
+            # 1. Get User (Safe) - NOW SETS source_channel
             # -------------------------
             user = self._get_or_create_user_safe(db, whatsapp_number)
 
@@ -684,13 +700,11 @@ class TherapeuticChatbot:
         formatted = re.sub(r"\n\n\n+", "\n\n", formatted)
         return formatted
 
-
 # -------------------------------------------------------------------------
 # Singleton Instance
 # -------------------------------------------------------------------------
 
 _chatbot_instance: Optional[TherapeuticChatbot] = None
-
 
 def get_chatbot() -> TherapeuticChatbot:
     """Return singleton chatbot instance."""
@@ -707,7 +721,6 @@ def get_chatbot() -> TherapeuticChatbot:
 
     return _chatbot_instance
 
-
 # -------------------------------------------------------------------------
 # Standalone Test
 # -------------------------------------------------------------------------
@@ -723,3 +736,4 @@ if __name__ == "__main__":
         print("Chatbot initialized successfully!")
     except Exception as e:
         print(f"Error initializing chatbot: {e}")
+
