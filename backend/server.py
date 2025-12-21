@@ -529,7 +529,7 @@ async def test_message(message: dict):
 # ======================================================================
 # Real-time dashboard + 5 API endpoints + Key-based security
 
-DASHBOARD_SECRET_KEY = "AWE-LUMI@2025!Logs"  
+DASHBOARD_SECRET_KEY = "AWE-LUMI@2025!Logs"
 
 # Dashboard serving endpoint (HTML page with key protection)
 @app.get("/dashboard")
@@ -550,6 +550,10 @@ async def serve_dashboard(key: str = None):
     except FileNotFoundError:
         return {"error": "Dashboard file not found"}, 404
 
+# ======================================================================
+# DASHBOARD METRICS API ENDPOINTS (5 Total)
+# ======================================================================
+
 # API endpoint 1: Get all dashboard metrics
 @app.get("/api/dashboard/metrics")
 async def get_dashboard_metrics():
@@ -561,17 +565,25 @@ async def get_dashboard_metrics():
     try:
         from database import aichatusers, Message
         
-        # Count by source_channel column (CORRECT - uses source_channel)
-        whatsapp_count = db.query(aichatusers).filter(
-            aichatusers.source_channel == 'whatsapp'
-        ).count()
-        
-        web_count = db.query(aichatusers).filter(
-            aichatusers.source_channel == 'web'
-        ).count()
+        # Count by source_channel column
+        try:
+            whatsapp_count = db.query(aichatusers).filter(
+                aichatusers.source_channel == 'whatsapp'
+            ).count()
+            
+            web_count = db.query(aichatusers).filter(
+                aichatusers.source_channel == 'web'
+            ).count()
+        except:
+            # Fallback if source_channel doesn't exist yet
+            logger.warning("⚠️ source_channel column not found, using fallback method")
+            whatsapp_count = db.query(aichatusers).filter(
+                aichatusers.whatsapp_number.isnot(None)
+            ).count()
+            total_count = db.query(aichatusers).count()
+            web_count = total_count - whatsapp_count
         
         total_count = db.query(aichatusers).count()
-        
         total_messages = db.query(Message).count()
         
         crisis_count = db.query(aichatusers).filter(
@@ -667,13 +679,23 @@ async def get_source_distribution():
     try:
         from database import aichatusers
         
-        whatsapp_count = db.query(aichatusers).filter(
-            aichatusers.source_channel == 'whatsapp'
-        ).count()
-        
-        web_count = db.query(aichatusers).filter(
-            aichatusers.source_channel == 'web'
-        ).count()
+        # Try with source_channel first
+        try:
+            whatsapp_count = db.query(aichatusers).filter(
+                aichatusers.source_channel == 'whatsapp'
+            ).count()
+            
+            web_count = db.query(aichatusers).filter(
+                aichatusers.source_channel == 'web'
+            ).count()
+        except:
+            # Fallback if source_channel doesn't exist yet
+            logger.warning("⚠️ source_channel column not found, using fallback method")
+            whatsapp_count = db.query(aichatusers).filter(
+                aichatusers.whatsapp_number.isnot(None)
+            ).count()
+            total_count = db.query(aichatusers).count()
+            web_count = total_count - whatsapp_count
         
         total_count = db.query(aichatusers).count()
         
