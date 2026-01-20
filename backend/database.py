@@ -160,10 +160,11 @@ def get_or_create_user(db, whatsapp_number: str):
     user = db.query(aichatusers).filter(aichatusers.whatsapp_number == whatsapp_number).first()
     
     if not user:
-        # Create new user
+        # Create new user with total_messages = 1 (for this first interaction)
         user = aichatusers(
             whatsapp_number=whatsapp_number,
-            source_channel=source_channel
+            source_channel=source_channel,
+            total_messages=1  # FIX: Count the first message
         )
         db.add(user)
         db.commit()
@@ -173,11 +174,11 @@ def get_or_create_user(db, whatsapp_number: str):
         # Update existing user
         user.last_interaction = datetime.utcnow()
         user.total_messages += 1
-        
+
         # Update source_channel if not set or if changed
         if not user.source_channel or user.source_channel == 'whatsapp':
             user.source_channel = source_channel
-        
+
         db.commit()
         logger.info(f"✓ User updated: {whatsapp_number} (source: {source_channel})")
     
