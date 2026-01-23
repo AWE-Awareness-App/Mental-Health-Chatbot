@@ -120,12 +120,17 @@ async def lifespan(app: FastAPI):
     # ---------- STARTUP ----------
     logger.info("🚀 Starting chatbot initialization...")
     
-    # Database test
+    # Database test and auto-create tables
     try:
         logger.info("🔐 Testing database connection...")
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
         logger.info("✓ Database connection verified")
+
+        # Auto-create any missing tables (including new voice tables)
+        from database import Base
+        Base.metadata.create_all(bind=engine)
+        logger.info("✓ Database tables synchronized")
     except Exception as e:
         logger.error(f"✗ Database initialization failed: {e}")
         raise
@@ -160,6 +165,18 @@ async def lifespan(app: FastAPI):
         app.state.chatbot = chatbot
         app.state.rag_system = rag_system
         logger.info("✓ Chatbot initialized successfully")
+
+        # Initialize voice handler for Phase 3B integration
+        try:
+            from services.voice_chatbot_handler import VoiceChatbotHandler
+            from routes.voice_routes import set_voice_handler
+            voice_handler = VoiceChatbotHandler(chatbot)
+            set_voice_handler(voice_handler)
+            app.state.voice_handler = voice_handler
+            logger.info("✓ Voice handler initialized successfully")
+        except Exception as voice_err:
+            logger.warning(f"⚠️ Voice handler initialization failed: {voice_err}")
+
     except Exception as e:
         logger.error(f"✗ Chatbot initialization failed: {e}")
         raise

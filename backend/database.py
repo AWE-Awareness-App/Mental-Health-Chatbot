@@ -292,6 +292,72 @@ def search_similar_messages(db, embedding, limit: int = 5):
 # INITIALIZATION
 # ======================================================================
 
+# ======================================================================
+# VOICE INTERACTION MODEL
+# ======================================================================
+
+class VoiceInteraction(Base):
+    """Log of all voice interactions with LUMI."""
+
+    __tablename__ = "voice_interactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String(100), nullable=False, index=True)  # WhatsApp or web ID
+    conversation_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+
+    # STT Input
+    user_transcription = Column(Text, nullable=False)
+    transcription_confidence = Column(Float, nullable=True)
+
+    # LUMI Response
+    bot_response = Column(Text, nullable=False)
+    sources = Column(ARRAY(String), nullable=True)  # List of citations
+
+    # Voice Metadata
+    language_code = Column(String(20), default="en-US")
+    is_crisis = Column(Boolean, default=False)
+    source_channel = Column(String(50), default="voice")
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def __repr__(self):
+        return f"<VoiceInteraction(user_id={self.user_id}, language={self.language_code})>"
+
+
+# ======================================================================
+# USER VOICE PREFERENCE MODEL
+# ======================================================================
+
+class UserVoicePreference(Base):
+    """Store user's voice and language preferences."""
+
+    __tablename__ = "user_voice_preferences"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String(100), unique=True, nullable=False, index=True)
+
+    # Voice preferences
+    preferred_voice = Column(String(100), default="en-US-AriaNeural")  # Voice name
+    preferred_voice_gender = Column(String(20), default="Female")  # Male/Female
+    preferred_language = Column(String(20), default="en-US")  # Language code
+
+    # Preferences
+    auto_play_audio = Column(Boolean, default=True)
+    audio_speed = Column(Float, default=1.0)  # Speech speed multiplier
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<UserVoicePreference(user_id={self.user_id}, voice={self.preferred_voice})>"
+
+
+# ======================================================================
+# INITIALIZATION
+# ======================================================================
+
 if __name__ == "__main__":
     logger.info("Initializing database...")
     init_db()
