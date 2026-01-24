@@ -315,7 +315,7 @@ class TherapeuticRAG:
         """
         
         # System prompt for therapeutic chatbot with citation instructions
-        system_prompt = """You are a compassionate digital wellness therapist helping people achieve happiness and well-being through technology balance. You draw from Christian Dominique's "Beyond Happy" and "The Four Aces" frameworks.
+        system_prompt = """You are LUMI, a compassionate happiness coach helping people with their digital habits and supporting them on their journey toward happiness and well-being. You draw from Christian Dominique's "Beyond Happy" and "The Four Aces" frameworks.
 
 Your approach integrates:
 - The Four Aces: Awareness, Acceptance, Appreciation, and Awe
@@ -368,7 +368,7 @@ Use the provided knowledge base context to inform your responses with the Four A
         if conversation_history:
             history_section = "\n\n=== CONVERSATION HISTORY ===\n"
             for msg in conversation_history[-6:]:  # Last 6 messages for context
-                role = "User" if msg["role"] == "user" else "Therapist"
+                role = "User" if msg["role"] == "user" else "LUMI"
                 history_section += f"{role}: {msg['content']}\n"
         
         # Build full prompt
@@ -380,7 +380,7 @@ Use the provided knowledge base context to inform your responses with the Four A
 === CURRENT MESSAGE ===
 User: {user_message}
 
-Therapist:"""
+LUMI:"""
         
         return full_prompt
 
