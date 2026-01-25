@@ -1,8 +1,9 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
 # Install system dependencies (including Azure Speech SDK requirements)
+# Using Bullseye which has OpenSSL 1.1 natively for Azure Speech SDK compatibility
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
@@ -10,13 +11,8 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     ca-certificates \
     libasound2 \
-    wget \
+    libssl1.1 \
     && rm -rf /var/lib/apt/lists/*
-
-# Install OpenSSL 1.1 for Azure Speech SDK (required for compatibility)
-RUN wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb \
-    && dpkg -i libssl1.1_1.1.1f-1ubuntu2_amd64.deb \
-    && rm libssl1.1_1.1.1f-1ubuntu2_amd64.deb
 
 # Copy requirements first for better caching
 COPY requirements.txt .
