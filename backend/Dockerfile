@@ -12,6 +12,12 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     libasound2 \
     libssl1.1 \
+    build-essential \
+    libgstreamer1.0-0 \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
