@@ -485,8 +485,9 @@ async def whatsapp_voice_webhook(request: Request):
 
             # Download audio from Twilio
             logger.info(f"Downloading audio from {media_url}...")
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 # Twilio requires authentication to download media
+                # Note: Twilio redirects to CDN (mms.twiliocdn.com), so follow_redirects=True is essential
                 auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
                 response = await client.get(media_url, auth=auth)
                 response.raise_for_status()
