@@ -17,4 +17,7 @@ python-multipart==0.0.20
 twilio==9.8.3
 uvicorn==0.25.0
 sqlalchemy>=2.0.25
-azure-identity>=1.15.0s
+azure-identity>=1.15.0
+azure-cognitiveservices-speech>=1.40.0
+aiofiles>=23.2.1
+httpx>=0.28.0
