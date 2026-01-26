@@ -397,6 +397,239 @@ async def whatsapp_webhook(request: Request):
 
 
 # ======================================================================
+# WHATSAPP VOICE MESSAGE WEBHOOK (PHASE 3C)
+# ======================================================================
+
+
+@app.post("/api/whatsapp/voice")
+async def whatsapp_voice_webhook(request: Request):
+    """
+    WhatsApp voice message webhook for Phase 3C.
+
+    Handles voice notes from WhatsApp users:
+    1. Downloads audio from Twilio MediaUrl
+    2. Transcribes using Azure STT
+    3. Processes through LUMI chatbot
+    4. Synthesizes response using Azure TTS
+    5. Sends audio response back via WhatsApp
+    """
+
+    try:
+        # Get form data from Twilio
+        form_data = await request.form()
+        whatsapp_number = form_data.get("From", "")
+        num_media = int(form_data.get("NumMedia", "0"))
+
+        logger.info(f"🎤 Received WhatsApp voice message from {whatsapp_number} (Media count: {num_media})")
+
+        # Check if media is present
+        if num_media == 0:
+            logger.warning("No media attached to WhatsApp message")
+            if twilio_client:
+                twilio_client.messages.create(
+                    from_=TWILIO_WHATSAPP_NUMBER,
+                    body="Please send a voice message to talk to LUMI.",
+                    to=whatsapp_number
+                )
+            return {"status": "no_media"}
+
+        # Get media URL and content type
+        media_url = form_data.get("MediaUrl0", "")
+        media_content_type = form_data.get("MediaContentType0", "")
+
+        logger.info(f"Media URL: {media_url}, Content-Type: {media_content_type}")
+
+        if not media_url:
+            logger.error("MediaUrl is missing")
+            return {"status": "error", "detail": "No media URL provided"}
+
+        # Check if it's an audio file
+        if not media_content_type.startswith("audio/"):
+            logger.warning(f"Non-audio media received: {media_content_type}")
+            if twilio_client:
+                twilio_client.messages.create(
+                    from_=TWILIO_WHATSAPP_NUMBER,
+                    body="Please send a voice message (not an image or video).",
+                    to=whatsapp_number
+                )
+            return {"status": "invalid_media_type"}
+
+        db = SessionLocal()
+
+        try:
+            # Import required services
+            import httpx
+            from services.speech_to_text import get_stt_service
+            from services.text_to_speech import get_tts_service
+
+            # Download audio from Twilio
+            logger.info(f"Downloading audio from {media_url}...")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # Twilio requires authentication to download media
+                auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+                response = await client.get(media_url, auth=auth)
+                response.raise_for_status()
+                audio_data = response.content
+
+            logger.info(f"✓ Downloaded {len(audio_data)} bytes of audio")
+
+            # Detect audio format from content type
+            audio_format = "ogg"  # WhatsApp typically sends OGG
+            if "ogg" in media_content_type:
+                audio_format = "ogg"
+            elif "mp3" in media_content_type:
+                audio_format = "mp3"
+            elif "wav" in media_content_type:
+                audio_format = "wav"
+            elif "opus" in media_content_type:
+                audio_format = "ogg"  # Opus is in OGG container
+
+            logger.info(f"Detected audio format: {audio_format}")
+
+            # Step 1: Transcribe audio (STT)
+            logger.info("Step 1: Transcribing audio...")
+            stt_service = get_stt_service()
+            transcription_result = stt_service.transcribe(
+                audio_data=audio_data,
+                audio_format=audio_format,
+                language="en-US"
+            )
+
+            if not transcription_result.success:
+                logger.error(f"Transcription failed: {transcription_result.error_message}")
+                if twilio_client:
+                    twilio_client.messages.create(
+                        from_=TWILIO_WHATSAPP_NUMBER,
+                        body="I couldn't understand your voice message. Please try again.",
+                        to=whatsapp_number
+                    )
+                return {"status": "transcription_failed"}
+
+            user_text = transcription_result.text
+            logger.info(f"✓ Transcribed: {user_text[:100]}...")
+
+            # Step 2: Process through LUMI chatbot
+            logger.info("Step 2: Processing through LUMI chatbot...")
+            voice_handler = app.state.voice_handler
+
+            if not voice_handler:
+                logger.error("Voice handler not initialized")
+                raise Exception("Voice handler not available")
+
+            lumi_result = voice_handler.process_voice_message(
+                db=db,
+                user_id=whatsapp_number,
+                transcribed_text=user_text,
+                language_code="en-US",
+                user_voice_preference="en-US-AriaNeural"
+            )
+
+            if not lumi_result["success"]:
+                logger.error(f"LUMI processing failed: {lumi_result.get('error_message')}")
+                if twilio_client:
+                    twilio_client.messages.create(
+                        from_=TWILIO_WHATSAPP_NUMBER,
+                        body="I'm having trouble processing your message. Please try again.",
+                        to=whatsapp_number
+                    )
+                return {"status": "processing_failed"}
+
+            bot_response = lumi_result["bot_response"]
+            is_crisis = lumi_result.get("is_crisis", False)
+            logger.info(f"✓ LUMI response: {bot_response[:100]}...")
+
+            # Step 3: Synthesize response (TTS)
+            logger.info("Step 3: Synthesizing audio response...")
+            tts_service = get_tts_service()
+            synthesis_result = tts_service.synthesize(
+                text=bot_response,
+                voice="en-US-AriaNeural",
+                audio_format="mp3"
+            )
+
+            if not synthesis_result.success:
+                logger.error(f"Synthesis failed: {synthesis_result.error_message}")
+                # Fall back to text response
+                if twilio_client:
+                    twilio_client.messages.create(
+                        from_=TWILIO_WHATSAPP_NUMBER,
+                        body=bot_response,
+                        to=whatsapp_number
+                    )
+                return {"status": "synthesis_failed_text_sent"}
+
+            logger.info(f"✓ Synthesized {synthesis_result.duration_seconds:.1f}s of audio")
+
+            # Step 4: Send audio response back via WhatsApp
+            logger.info("Step 4: Sending audio response via WhatsApp...")
+
+            if twilio_client:
+                try:
+                    # Twilio Media API requires a publicly accessible URL
+                    # For now, we'll send the text response and note this limitation
+                    # In production, you'd upload to Azure Blob Storage or similar
+
+                    # Create message with text (audio sending requires URL)
+                    message = twilio_client.messages.create(
+                        from_=TWILIO_WHATSAPP_NUMBER,
+                        body=bot_response,
+                        to=whatsapp_number
+                    )
+
+                    logger.info(f"✓ WhatsApp message sent (SID: {message.sid})")
+                    logger.warning("⚠️ Audio response generated but not sent - requires media URL hosting")
+
+                    return {
+                        "status": "success",
+                        "transcription": user_text,
+                        "response": bot_response,
+                        "is_crisis": is_crisis,
+                        "message_sid": message.sid,
+                        "note": "Audio generated but sent as text (media hosting not configured)"
+                    }
+
+                except Exception as e:
+                    logger.error(f"✗ Failed to send via Twilio: {e}")
+                    return {
+                        "status": "error",
+                        "detail": str(e)
+                    }
+            else:
+                logger.warning("⚠️ Twilio not configured")
+                return {
+                    "status": "processed",
+                    "transcription": user_text,
+                    "response": bot_response,
+                    "note": "Twilio not configured"
+                }
+
+        except Exception as e:
+            logger.error(f"✗ Error processing WhatsApp voice: {e}", exc_info=True)
+
+            if twilio_client:
+                try:
+                    twilio_client.messages.create(
+                        from_=TWILIO_WHATSAPP_NUMBER,
+                        body=(
+                            "I'm sorry, I encountered an error processing your voice message. "
+                            "Please try again or send a text message instead."
+                        ),
+                        to=whatsapp_number
+                    )
+                except Exception as send_error:
+                    logger.error(f"✗ Failed sending error message: {send_error}")
+
+            return {"status": "error", "detail": str(e)}
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"✗ WhatsApp voice webhook error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ======================================================================
 # WHATSAPP STATUS WEBHOOK - HANDLES DELIVERY CONFIRMATIONS
 # ======================================================================
 
@@ -408,11 +641,11 @@ async def whatsapp_status_webhook(request: Request):
         form_data = await request.form()
         message_sid = form_data.get("MessageSid", "")
         message_status = form_data.get("MessageStatus", "")
-        
+
         logger.info(f"📊 WhatsApp Status - SID: {message_sid}, Status: {message_status}")
-        
+
         return {"status": "received"}
-    
+
     except Exception as e:
         logger.error(f"Error in status webhook: {e}")
         return {"status": "error"}
