@@ -164,8 +164,8 @@ class TextToSpeechService:
             logger.info(f"Azure Speech SDK initialized successfully for TTS (region: {self.azure_region})")
             return True
             
-        except ImportError:
-            logger.error("Azure Speech SDK not installed. Run: pip install azure-cognitiveservices-speech")
+        except ImportError as e:
+            logger.error(f"Azure Speech SDK import failed: {e}. Run: pip install azure-cognitiveservices-speech")
             return False
         except Exception as e:
             logger.error(f"Failed to initialize Azure Speech SDK: {e}")
