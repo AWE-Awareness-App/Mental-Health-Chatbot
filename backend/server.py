@@ -311,18 +311,39 @@ async def status():
 
 @app.post("/api/whatsapp")
 async def whatsapp_webhook(request: Request):
-    """WhatsApp webhook endpoint for Twilio"""
-    
+    """
+    WhatsApp webhook endpoint for Twilio.
+
+    Intelligently routes between:
+    - Voice messages (NumMedia > 0, audio/*)
+    - Text messages (Body content)
+    """
+
     try:
         # Get form data
         form_data = await request.form()
         incoming_message = form_data.get("Body", "").strip()
         whatsapp_number = form_data.get("From", "")
-        
-        logger.info(f"📱 Received WhatsApp message from {whatsapp_number}: {incoming_message}")
-        
+        num_media = int(form_data.get("NumMedia", "0"))
+
+        logger.info(f"📱 Received WhatsApp message from {whatsapp_number} (Media: {num_media})")
+
+        # Route to voice handler if media is present
+        if num_media > 0:
+            media_content_type = form_data.get("MediaContentType0", "")
+
+            # Check if it's audio (voice message)
+            if media_content_type.startswith("audio/"):
+                logger.info("→ Routing to voice handler")
+                return await whatsapp_voice_webhook(request)
+            else:
+                logger.info(f"→ Non-audio media received: {media_content_type}")
+
+        # Continue with text message handling
+        logger.info(f"→ Processing as text: {incoming_message[:50]}...")
+
         # Skipping signature validation (Twilio validator has bug with integer params)
-        
+
         if not incoming_message:
             return {"status": "processed"}
         
