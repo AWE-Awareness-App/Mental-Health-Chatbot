@@ -332,13 +332,22 @@ class SpeechToTextService:
                 confidence = 0.9  # Default confidence
                 if hasattr(result, 'best') and result.best:
                     confidence = result.best[0].confidence
-                
+
+                # Handle duration - Azure SDK returns ticks (100-nanosecond units)
+                duration_seconds = 0.0
+                if hasattr(result, 'duration'):
+                    if hasattr(result.duration, 'total_seconds'):
+                        duration_seconds = result.duration.total_seconds()
+                    elif isinstance(result.duration, (int, float)):
+                        # Duration in ticks (100-nanosecond units)
+                        duration_seconds = result.duration / 10_000_000
+
                 return TranscriptionResult(
                     success=True,
                     text=result.text,
                     confidence=confidence,
                     language=language,
-                    duration_seconds=result.duration.total_seconds() if hasattr(result, 'duration') else 0.0,
+                    duration_seconds=duration_seconds,
                     raw_response={"reason": str(result.reason)}
                 )
                 
