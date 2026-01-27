@@ -21,3 +21,4 @@ azure-identity>=1.15.0
 azure-cognitiveservices-speech>=1.40.0
 aiofiles>=23.2.1
 httpx>=0.28.0
+pydub>=0.25.1

@@ -215,16 +215,68 @@ class SpeechToTextService:
             raw_response={"mock": True, "audio_size_kb": audio_size_kb}
         )
     
+    def _convert_to_wav(self, audio_data: bytes, audio_format: str) -> bytes:
+        """
+        Convert audio to WAV format for Azure Speech SDK.
+
+        Azure Speech SDK's PushAudioInputStream expects raw PCM/WAV audio,
+        not compressed formats like OGG/Opus from WhatsApp.
+
+        Args:
+            audio_data: Raw audio bytes in source format
+            audio_format: Source audio format (ogg, mp3, etc.)
+
+        Returns:
+            WAV audio bytes suitable for Azure Speech SDK
+        """
+        if audio_format == "wav":
+            return audio_data
+
+        try:
+            from pydub import AudioSegment
+            import io
+
+            logger.info(f"Converting {audio_format.upper()} to WAV for Azure STT...")
+
+            # Load audio from bytes
+            audio_io = io.BytesIO(audio_data)
+
+            # pydub auto-detects format, but we hint it for better reliability
+            if audio_format == "ogg":
+                audio = AudioSegment.from_ogg(audio_io)
+            elif audio_format == "mp3":
+                audio = AudioSegment.from_mp3(audio_io)
+            else:
+                audio = AudioSegment.from_file(audio_io, format=audio_format)
+
+            # Convert to WAV (16kHz mono for speech recognition)
+            audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+
+            # Export to WAV bytes
+            wav_io = io.BytesIO()
+            audio.export(wav_io, format="wav")
+            wav_data = wav_io.getvalue()
+
+            logger.info(f"✓ Converted to WAV: {len(audio_data)} bytes → {len(wav_data)} bytes")
+            return wav_data
+
+        except ImportError:
+            logger.error("pydub not installed. Run: pip install pydub")
+            raise
+        except Exception as e:
+            logger.error(f"Audio conversion failed: {e}")
+            raise
+
     def _transcribe_azure(self, audio_data: bytes, audio_format: str,
                           language: str) -> TranscriptionResult:
         """
         Transcribe audio using Azure Speech Services.
-        
+
         Args:
             audio_data: Raw audio bytes
             audio_format: Audio format
             language: Language code
-        
+
         Returns:
             TranscriptionResult from Azure Speech Services
         """
@@ -237,18 +289,32 @@ class SpeechToTextService:
                 duration_seconds=0.0,
                 error_message="Azure Speech Services not initialized. Check AZURE_SPEECH_KEY and AZURE_SPEECH_REGION."
             )
-        
+
         try:
             import azure.cognitiveservices.speech as speechsdk
-            
+
+            # Convert non-WAV formats to WAV for Azure Speech SDK
+            if audio_format != "wav":
+                try:
+                    audio_data = self._convert_to_wav(audio_data, audio_format)
+                except Exception as conv_err:
+                    return TranscriptionResult(
+                        success=False,
+                        text="",
+                        confidence=0.0,
+                        language=language,
+                        duration_seconds=0.0,
+                        error_message=f"Audio conversion failed: {conv_err}"
+                    )
+
             # Set language for this request
             self._speech_config.speech_recognition_language = language
-            
+
             # Create audio stream from bytes
             audio_stream = speechsdk.audio.PushAudioInputStream()
             audio_stream.write(audio_data)
             audio_stream.close()
-            
+
             audio_config = speechsdk.audio.AudioConfig(stream=audio_stream)
             
             # Create recognizer
