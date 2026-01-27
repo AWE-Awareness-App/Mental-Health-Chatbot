@@ -483,15 +483,34 @@ async def whatsapp_voice_webhook(request: Request):
             from services.speech_to_text import get_stt_service
             from services.text_to_speech import get_tts_service
 
-            # Download audio from Twilio
+            # Download audio from Twilio with retry logic
+            # Twilio media may not be immediately available (race condition)
+            import asyncio
+
             logger.info(f"Downloading audio from {media_url}...")
+            audio_data = None
+            max_retries = 3
+            retry_delay = 1.0  # seconds
+
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                # Twilio requires authentication to download media
-                # Note: Twilio redirects to CDN (mms.twiliocdn.com), so follow_redirects=True is essential
                 auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-                response = await client.get(media_url, auth=auth)
-                response.raise_for_status()
-                audio_data = response.content
+
+                for attempt in range(max_retries):
+                    try:
+                        response = await client.get(media_url, auth=auth)
+                        response.raise_for_status()
+                        audio_data = response.content
+                        break  # Success, exit retry loop
+                    except httpx.HTTPStatusError as e:
+                        if e.response.status_code == 404 and attempt < max_retries - 1:
+                            logger.warning(f"Media not ready (404), retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+                            await asyncio.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                        else:
+                            raise  # Re-raise on last attempt or non-404 errors
+
+            if not audio_data:
+                raise Exception("Failed to download audio after retries")
 
             logger.info(f"✓ Downloaded {len(audio_data)} bytes of audio")
 
