@@ -254,7 +254,10 @@ class TherapeuticRAG:
             except Exception as pgvector_error:
                 logger.warning(f"⚠️ pgvector not available: {pgvector_error}")
                 logger.info("📌 Falling back to basic retrieval (first k documents)")
-                
+
+                # Rollback the failed transaction before fallback query
+                db.rollback()
+
                 # Fallback: just get first k documents (no semantic search)
                 results = db.query(KnowledgeDocument).limit(k).all()
                 
