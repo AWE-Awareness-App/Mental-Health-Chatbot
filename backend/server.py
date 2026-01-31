@@ -170,10 +170,18 @@ async def lifespan(app: FastAPI):
         try:
             from services.voice_chatbot_handler import VoiceChatbotHandler
             from routes.voice_routes import set_voice_handler
+            from utils.blob_storage import get_blob_storage
             voice_handler = VoiceChatbotHandler(chatbot)
             set_voice_handler(voice_handler)
             app.state.voice_handler = voice_handler
             logger.info("✓ Voice handler initialized successfully")
+
+            # Initialize blob storage for audio responses
+            blob_storage = get_blob_storage()
+            if blob_storage.is_available():
+                logger.info("✓ Azure Blob Storage initialized for audio responses")
+            else:
+                logger.warning("⚠️ Azure Blob Storage not configured - audio responses will be sent as text")
         except Exception as voice_err:
             logger.warning(f"⚠️ Voice handler initialization failed: {voice_err}")
 
@@ -606,19 +614,49 @@ async def whatsapp_voice_webhook(request: Request):
 
             if twilio_client:
                 try:
-                    # Twilio Media API requires a publicly accessible URL
-                    # For now, we'll send the text response and note this limitation
-                    # In production, you'd upload to Azure Blob Storage or similar
+                    # Try to upload audio to blob storage and send via WhatsApp
+                    from utils.blob_storage import get_blob_storage
+                    blob_storage = get_blob_storage()
 
-                    # Create message with text (audio sending requires URL)
+                    if blob_storage.is_available():
+                        # Upload audio and get URL with SAS token
+                        audio_url = blob_storage.upload_audio(
+                            audio_data=synthesis_result.audio_data,
+                            audio_format="mp3",
+                            user_id=whatsapp_number,
+                            expiry_hours=24
+                        )
+
+                        if audio_url:
+                            # Send audio message with URL
+                            message = twilio_client.messages.create(
+                                from_=TWILIO_WHATSAPP_NUMBER,
+                                to=whatsapp_number,
+                                media_url=[audio_url]
+                            )
+
+                            logger.info(f"✅ WhatsApp AUDIO message sent (SID: {message.sid})")
+
+                            return {
+                                "status": "success",
+                                "transcription": user_text,
+                                "response": bot_response,
+                                "is_crisis": is_crisis,
+                                "message_sid": message.sid,
+                                "audio_url": audio_url,
+                                "delivery_method": "audio"
+                            }
+                        else:
+                            logger.warning("Failed to upload audio to blob storage, falling back to text")
+
+                    # Fallback: Send text if blob storage unavailable or upload failed
                     message = twilio_client.messages.create(
                         from_=TWILIO_WHATSAPP_NUMBER,
                         body=bot_response,
                         to=whatsapp_number
                     )
 
-                    logger.info(f"✓ WhatsApp message sent (SID: {message.sid})")
-                    logger.warning("⚠️ Audio response generated but not sent - requires media URL hosting")
+                    logger.info(f"✓ WhatsApp TEXT message sent (SID: {message.sid})")
 
                     return {
                         "status": "success",
@@ -626,7 +664,8 @@ async def whatsapp_voice_webhook(request: Request):
                         "response": bot_response,
                         "is_crisis": is_crisis,
                         "message_sid": message.sid,
-                        "note": "Audio generated but sent as text (media hosting not configured)"
+                        "delivery_method": "text",
+                        "note": "Audio generated but sent as text (blob storage unavailable)"
                     }
 
                 except Exception as e:

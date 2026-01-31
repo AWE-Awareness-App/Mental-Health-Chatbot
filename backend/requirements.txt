@@ -19,6 +19,7 @@ uvicorn==0.25.0
 sqlalchemy>=2.0.25
 azure-identity>=1.15.0
 azure-cognitiveservices-speech>=1.40.0
+azure-storage-blob>=12.19.0
 aiofiles>=23.2.1
 httpx>=0.28.0
 pydub>=0.25.1
