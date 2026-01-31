@@ -129,6 +129,22 @@
             border-left: 5px solid #4caf50;
         }
 
+        .metric-card.voice {
+            border-left: 5px solid #9c27b0;
+        }
+
+        .metric-card.audio {
+            border-left: 5px solid #00bcd4;
+        }
+
+        .metric-card.storage {
+            border-left: 5px solid #ff5722;
+        }
+
+        .metric-card.delivery-rate {
+            border-left: 5px solid #ffc107;
+        }
+
         .charts-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
@@ -335,6 +351,34 @@
                 <div class="metric-value" id="active-count">-</div>
                 <div class="metric-description">Last 24 hours</div>
             </div>
+
+            <div class="metric-card voice">
+                <div class="metric-icon">🎤</div>
+                <div class="metric-label">Voice Messages</div>
+                <div class="metric-value" id="voice-count">-</div>
+                <div class="metric-description">Total voice interactions</div>
+            </div>
+
+            <div class="metric-card audio">
+                <div class="metric-icon">🔊</div>
+                <div class="metric-label">Audio Responses</div>
+                <div class="metric-value" id="audio-count">-</div>
+                <div class="metric-description">Audio files generated</div>
+            </div>
+
+            <div class="metric-card delivery-rate">
+                <div class="metric-icon">📊</div>
+                <div class="metric-label">Audio Delivery Rate</div>
+                <div class="metric-value" id="delivery-rate">-</div>
+                <div class="metric-description">Audio vs text fallback</div>
+            </div>
+
+            <div class="metric-card storage">
+                <div class="metric-icon">☁️</div>
+                <div class="metric-label">Blob Storage</div>
+                <div class="metric-value" id="storage-size">-</div>
+                <div class="metric-description">Azure storage used</div>
+            </div>
         </div>
 
         <!-- Charts -->
@@ -347,6 +391,11 @@
             <div class="chart-container">
                 <div class="chart-title">🚨 Crisis Alerts by Day</div>
                 <canvas id="crisisChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">🎤 Voice Interactions (Last 7 Days)</div>
+                <canvas id="voiceChart"></canvas>
             </div>
         </div>
 
@@ -453,6 +502,24 @@
             }
         }
 
+        async function fetchVoiceMetrics() {
+            try {
+                const response = await fetch(`${API_BASE}/api/dashboard/voice-metrics`);
+                if (!response.ok) throw new Error('Failed to fetch voice metrics');
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching voice metrics:', error);
+                return {
+                    total_voice_interactions: 0,
+                    voice_today: 0,
+                    total_audio_files: 0,
+                    audio_delivery_rate: 0,
+                    storage_mb: 0,
+                    voice_trend: []
+                };
+            }
+        }
+
         // ================================================================
         // Update Functions
         // ================================================================
@@ -513,16 +580,40 @@
 
         function updateActiveUsersChart(data) {
             if (!data.data || data.data.length === 0) return;
-            
+
             const labels = data.data.map(d => d.day);
             const values = data.data.map(d => d.users);
-            
+
             if (charts.active) {
                 charts.active.data.labels = labels;
                 charts.active.data.datasets[0].data = values;
                 charts.active.update();
             } else {
                 initActiveUsersChart(labels, values);
+            }
+        }
+
+        function updateVoiceMetrics(data) {
+            if (!data) return;
+
+            document.getElementById('voice-count').textContent = data.total_voice_interactions.toLocaleString();
+            document.getElementById('audio-count').textContent = data.total_audio_files.toLocaleString();
+            document.getElementById('delivery-rate').textContent = data.audio_delivery_rate + '%';
+            document.getElementById('storage-size').textContent = data.storage_mb + ' MB';
+        }
+
+        function updateVoiceChart(data) {
+            if (!data.voice_trend || data.voice_trend.length === 0) return;
+
+            const labels = data.voice_trend.map(d => d.day);
+            const values = data.voice_trend.map(d => d.count);
+
+            if (charts.voice) {
+                charts.voice.data.labels = labels;
+                charts.voice.data.datasets[0].data = values;
+                charts.voice.update();
+            } else {
+                initVoiceChart(labels, values);
             }
         }
 
@@ -606,7 +697,7 @@
         function initActiveUsersChart(labels, values) {
             const ctx = document.getElementById('activeUsersChart');
             if (!ctx) return;
-            
+
             charts.active = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -617,6 +708,43 @@
                         backgroundColor: '#4caf50',
                         borderRadius: 8,
                         borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: true, labels: { font: { size: 12, weight: 'bold' } } }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { font: { size: 11 } } },
+                        x: { ticks: { font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        function initVoiceChart(labels, values) {
+            const ctx = document.getElementById('voiceChart');
+            if (!ctx) return;
+
+            charts.voice = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Voice Interactions',
+                        data: values,
+                        borderColor: '#9c27b0',
+                        backgroundColor: 'rgba(156, 39, 176, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 6,
+                        pointBackgroundColor: '#9c27b0',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 8
                     }]
                 },
                 options: {
@@ -646,21 +774,24 @@
             
             try {
                 // Fetch all data in parallel
-                const [metrics, growth, crisis, distribution, active] = await Promise.all([
+                const [metrics, growth, crisis, distribution, active, voice] = await Promise.all([
                     fetchMetrics(),
                     fetchGrowthData(),
                     fetchCrisisData(),
                     fetchSourceDistribution(),
-                    fetchActiveUsers()
+                    fetchActiveUsers(),
+                    fetchVoiceMetrics()
                 ]);
-                
+
                 // Update all UI elements
                 updateMetrics(metrics);
                 updateGrowthChart(growth);
                 updateCrisisChart(crisis);
                 updateSourceDistribution(distribution);
                 updateActiveUsersChart(active);
-                
+                updateVoiceMetrics(voice);
+                updateVoiceChart(voice);
+
             } catch (error) {
                 console.error('Error refreshing dashboard:', error);
                 showError('Failed to refresh dashboard');

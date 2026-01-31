@@ -355,6 +355,42 @@ class UserVoicePreference(Base):
 
 
 # ======================================================================
+# VOICE AUDIO FILES MODEL (Azure Blob Storage Tracking)
+# ======================================================================
+
+class VoiceAudioFile(Base):
+    """Track uploaded audio files in Azure Blob Storage."""
+
+    __tablename__ = "voice_audio_files"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    voice_interaction_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    user_id = Column(String(255), nullable=False, index=True)
+
+    # Blob Storage details
+    blob_name = Column(String(500), nullable=False)
+    blob_url = Column(Text, nullable=False)
+    container_name = Column(String(100), default="voice-responses")
+
+    # Audio metadata
+    audio_format = Column(String(10), default="mp3")
+    duration_seconds = Column(Float, nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+
+    # Delivery tracking
+    delivery_method = Column(String(20), default="audio")  # 'audio' or 'text'
+    delivery_status = Column(String(20), default="sent")   # 'sent', 'delivered', 'failed'
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    expires_at = Column(DateTime, nullable=True)  # SAS token expiry
+    is_deleted = Column(Boolean, default=False)
+
+    def __repr__(self):
+        return f"<VoiceAudioFile(user_id={self.user_id}, blob={self.blob_name})>"
+
+
+# ======================================================================
 # INITIALIZATION
 # ======================================================================
 

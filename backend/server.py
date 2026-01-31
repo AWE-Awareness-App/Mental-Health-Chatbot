@@ -637,6 +637,32 @@ async def whatsapp_voice_webhook(request: Request):
 
                             logger.info(f"✅ WhatsApp AUDIO message sent (SID: {message.sid})")
 
+                            # Log audio file to database for metrics tracking
+                            try:
+                                from database import VoiceAudioFile
+                                db = SessionLocal()
+
+                                # Extract blob name from URL (remove SAS token)
+                                blob_name = audio_url.split('?')[0].split('/')[-1]
+
+                                audio_file = VoiceAudioFile(
+                                    user_id=whatsapp_number,
+                                    blob_name=blob_name,
+                                    blob_url=audio_url.split('?')[0],  # URL without SAS token
+                                    audio_format="mp3",
+                                    duration_seconds=synthesis_result.duration_seconds,
+                                    file_size_bytes=len(synthesis_result.audio_data),
+                                    delivery_method="audio",
+                                    delivery_status="sent",
+                                    expires_at=datetime.utcnow() + timedelta(hours=24)
+                                )
+                                db.add(audio_file)
+                                db.commit()
+                                db.close()
+                                logger.info(f"✓ Audio file logged to database")
+                            except Exception as db_err:
+                                logger.warning(f"Failed to log audio file to database: {db_err}")
+
                             return {
                                 "status": "success",
                                 "transcription": user_text,
@@ -657,6 +683,28 @@ async def whatsapp_voice_webhook(request: Request):
                     )
 
                     logger.info(f"✓ WhatsApp TEXT message sent (SID: {message.sid})")
+
+                    # Log text fallback to database for metrics tracking
+                    try:
+                        from database import VoiceAudioFile
+                        db = SessionLocal()
+
+                        audio_file = VoiceAudioFile(
+                            user_id=whatsapp_number,
+                            blob_name="text_fallback",
+                            blob_url="",
+                            audio_format="mp3",
+                            duration_seconds=synthesis_result.duration_seconds,
+                            file_size_bytes=len(synthesis_result.audio_data),
+                            delivery_method="text",
+                            delivery_status="sent"
+                        )
+                        db.add(audio_file)
+                        db.commit()
+                        db.close()
+                        logger.info(f"✓ Text fallback logged to database")
+                    except Exception as db_err:
+                        logger.warning(f"Failed to log text fallback to database: {db_err}")
 
                     return {
                         "status": "success",
@@ -1145,6 +1193,100 @@ async def get_active_users():
     except Exception as e:
         logger.error(f"Error fetching active users: {e}")
         return {'error': str(e)}, 500
+    finally:
+        db.close()
+
+
+# API endpoint 6: Get voice/audio metrics
+@app.get("/api/dashboard/voice-metrics")
+async def get_voice_metrics():
+    """
+    Get voice and audio storage metrics
+    Returns: Voice interactions, audio files, delivery stats, storage usage
+    """
+    db = SessionLocal()
+    try:
+        from database import VoiceInteraction, VoiceAudioFile
+
+        # Total voice interactions
+        total_voice = db.query(VoiceInteraction).count()
+
+        # Voice interactions today
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        voice_today = db.query(VoiceInteraction).filter(
+            VoiceInteraction.created_at >= today_start
+        ).count()
+
+        # Total audio files uploaded
+        total_audio_files = db.query(VoiceAudioFile).filter(
+            VoiceAudioFile.is_deleted == False
+        ).count()
+
+        # Audio delivery method breakdown
+        audio_delivered = db.query(VoiceAudioFile).filter(
+            VoiceAudioFile.delivery_method == 'audio',
+            VoiceAudioFile.is_deleted == False
+        ).count()
+
+        text_fallback = db.query(VoiceAudioFile).filter(
+            VoiceAudioFile.delivery_method == 'text',
+            VoiceAudioFile.is_deleted == False
+        ).count()
+
+        # Audio delivery rate
+        total_attempts = audio_delivered + text_fallback
+        audio_delivery_rate = round((audio_delivered / total_attempts * 100), 1) if total_attempts > 0 else 0
+
+        # Storage usage (sum of file sizes)
+        storage_result = db.query(func.sum(VoiceAudioFile.file_size_bytes)).filter(
+            VoiceAudioFile.is_deleted == False
+        ).scalar()
+        storage_mb = round(storage_result / (1024 * 1024), 2) if storage_result else 0
+
+        # Last 7 days voice activity
+        voice_trend = []
+        days_short = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+        for i in range(6, -1, -1):
+            date = datetime.utcnow() - timedelta(days=i)
+            date_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+            date_end = date_start + timedelta(hours=24)
+
+            count = db.query(VoiceInteraction).filter(
+                VoiceInteraction.created_at >= date_start,
+                VoiceInteraction.created_at < date_end
+            ).count()
+
+            day_name = days_short[date_start.weekday()]
+            voice_trend.append({
+                'day': day_name,
+                'count': count
+            })
+
+        return {
+            'total_voice_interactions': total_voice,
+            'voice_today': voice_today,
+            'total_audio_files': total_audio_files,
+            'audio_delivered': audio_delivered,
+            'text_fallback': text_fallback,
+            'audio_delivery_rate': audio_delivery_rate,
+            'storage_mb': storage_mb,
+            'voice_trend': voice_trend,
+            'last_updated': datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error fetching voice metrics: {e}")
+        return {
+            'total_voice_interactions': 0,
+            'voice_today': 0,
+            'total_audio_files': 0,
+            'audio_delivered': 0,
+            'text_fallback': 0,
+            'audio_delivery_rate': 0,
+            'storage_mb': 0,
+            'voice_trend': [],
+            'error': str(e)
+        }, 500
     finally:
         db.close()
 
