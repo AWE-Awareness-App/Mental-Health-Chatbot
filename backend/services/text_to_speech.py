@@ -96,15 +96,28 @@ class TextToSpeechService:
     
     # Available voices (Azure Neural voices)
     AVAILABLE_VOICES = [
+        # Indian English voices
+        VoiceInfo("en-IN-NeerjaNeural", "Neerja (India Female)", "en-IN", "Female"),
+        VoiceInfo("en-IN-PrabhatNeural", "Prabhat (India Male)", "en-IN", "Male"),
+
+        # US English voices
         VoiceInfo("en-US-AriaNeural", "Aria (US Female)", "en-US", "Female"),
         VoiceInfo("en-US-GuyNeural", "Guy (US Male)", "en-US", "Male"),
         VoiceInfo("en-US-JennyNeural", "Jenny (US Female)", "en-US", "Female"),
         VoiceInfo("en-US-DavisNeural", "Davis (US Male)", "en-US", "Male"),
+
+        # UK English voices
         VoiceInfo("en-GB-SoniaNeural", "Sonia (UK Female)", "en-GB", "Female"),
         VoiceInfo("en-GB-RyanNeural", "Ryan (UK Male)", "en-GB", "Male"),
+
+        # Australian English voices
         VoiceInfo("en-AU-NatashaNeural", "Natasha (AU Female)", "en-AU", "Female"),
+
+        # Spanish voices
         VoiceInfo("es-ES-ElviraNeural", "Elvira (ES Female)", "es-ES", "Female"),
         VoiceInfo("es-MX-DaliaNeural", "Dalia (MX Female)", "es-MX", "Female"),
+
+        # French voices
         VoiceInfo("fr-FR-DeniseNeural", "Denise (FR Female)", "fr-FR", "Female"),
     ]
     
@@ -130,6 +143,31 @@ class TextToSpeechService:
         
         logger.info(f"TTS Service initialized - Mode: {self.service_type}, Voice: {self.default_voice}")
     
+    def _preprocess_text_for_speech(self, text: str) -> str:
+        """
+        Preprocess text to improve speech synthesis pronunciation.
+
+        Fixes common pronunciation issues:
+        - "7Cs" -> "7 Cs" (pronounced as "seven Cs")
+        - "8Ps" -> "8 Ps" (pronounced as "eight Ps")
+
+        Note: Leaves "4 Aces" and other spaced patterns unchanged.
+
+        Args:
+            text: Original text
+
+        Returns:
+            Preprocessed text with improved pronunciation hints
+        """
+        import re
+
+        # Fix specific number + letter + 's' patterns without spaces
+        # Only matches patterns like "7Cs", "8Ps" where there's NO space
+        # This won't affect "4 Aces" which already has a space
+        text = re.sub(r'(\d+)([A-Z])s\b', r'\1 \2s', text)
+
+        return text
+
     def _initialize_azure(self) -> bool:
         """
         Initialize Azure Speech SDK.
@@ -175,21 +213,24 @@ class TextToSpeechService:
                    audio_format: str = "mp3") -> SynthesisResult:
         """
         Synthesize text to audio.
-        
+
         Args:
             text: Text to synthesize
             voice: Voice name (e.g., 'en-US-AriaNeural'). Uses default if not specified.
             audio_format: Output format (mp3, wav, ogg)
-        
+
         Returns:
             SynthesisResult with audio data and metadata
         """
         start_time = time.time()
         voice = voice or self.default_voice
         audio_format = audio_format.lower()
-        
+
         logger.info(f"Starting synthesis - Voice: {voice}, Format: {audio_format}, Text length: {len(text)}")
-        
+
+        # Preprocess text for better pronunciation
+        text = self._preprocess_text_for_speech(text)
+
         # Validate text
         if not text or len(text.strip()) < self.MIN_TEXT_LENGTH:
             return SynthesisResult(
