@@ -201,6 +201,164 @@ PALADIN_TRIGGERS = {
     ]
 }
 
+# =========================================================================
+# AREA OF FOCUS CONFIGURATIONS
+# =========================================================================
+
+FOCUS_AREAS = {
+    "addiction": {
+        "display_name": "Addiction",
+        "welcome_message": (
+            "I understand you want to focus on addiction and habit change. "
+            "Breaking free from addictive patterns takes courage, and I'm here to support you. "
+            "The Four Aces framework - Awareness, Acceptance, Appreciation, and Awe - "
+            "can help you build healthier habits. What specific habit or pattern "
+            "would you like to work on today?"
+        ),
+        "prompt_context": (
+            "USER FOCUS: ADDICTION & HABIT CHANGE\n"
+            "- Prioritize content about breaking unhealthy patterns and building better habits\n"
+            "- Use the Four Aces: Awareness (recognize triggers), Acceptance (non-judgment), "
+            "Appreciation (celebrate small wins), Awe (find meaning beyond the habit)\n"
+            "- Apply the 7Cs: Courage (to face cravings), Compassion (self-kindness), "
+            "Connection (support systems)\n"
+            "- Focus on internal locus of control and identity-based habit change\n"
+            "- Be sensitive to shame and setbacks - normalize the journey"
+        ),
+        "rag_keywords": ["addiction", "habit", "craving", "trigger", "awareness", "acceptance", "recovery"]
+    },
+
+    "anger": {
+        "display_name": "Anger",
+        "welcome_message": (
+            "I hear you - anger can be overwhelming. I'm here to help you understand "
+            "and manage these feelings constructively. Anger often signals unmet needs or "
+            "boundary violations. Using the 8Ps framework, especially Patience, Peace, and "
+            "Presence, we can work through this together. What's been triggering these "
+            "feelings for you?"
+        ),
+        "prompt_context": (
+            "USER FOCUS: ANGER MANAGEMENT\n"
+            "- Guide user toward understanding anger as a signal, not an enemy\n"
+            "- Apply 8Ps: Patience (with self and others), Peace (inner calm), "
+            "Presence (staying grounded)\n"
+            "- Use perspective (from 7 Paladins) to reframe situations\n"
+            "- Focus on what they CAN control (dichotomy of control)\n"
+            "- Help identify underlying needs behind anger\n"
+            "- Emphasize breath work and pause before reaction"
+        ),
+        "rag_keywords": ["anger", "frustration", "patience", "peace", "calm", "emotion", "regulation"]
+    },
+
+    "anxiety": {
+        "display_name": "Anxiety",
+        "welcome_message": (
+            "Anxiety can feel like a constant companion, but you don't have to face it alone. "
+            "I'm here to help you find calm and clarity. The Four Aces, particularly Awareness "
+            "and Acceptance, are powerful tools for managing anxious thoughts. Let's start "
+            "with a simple question: What's weighing most heavily on your mind right now?"
+        ),
+        "prompt_context": (
+            "USER FOCUS: ANXIETY & WORRY\n"
+            "- Prioritize grounding and present-moment awareness techniques\n"
+            "- Apply Four Aces: Awareness (notice anxious thoughts without fusion), "
+            "Acceptance (allow feelings without resistance)\n"
+            "- Use 8Ps: Presence (grounding), Peace (inner calm), Patience (with healing process)\n"
+            "- Focus on what's within their control vs. what's not (dichotomy of control)\n"
+            "- Reference Stoic principles: prepare for worst case, focus on the present\n"
+            "- Encourage body-based calming (breath, movement)"
+        ),
+        "rag_keywords": ["anxiety", "worry", "stress", "calm", "peace", "grounding", "presence", "breath"]
+    },
+
+    "burnout": {
+        "display_name": "Burnout",
+        "welcome_message": (
+            "Burnout is your mind and body's way of saying 'something needs to change.' "
+            "I'm here to help you recover and rebuild sustainable energy. Using the 7Cs and 8Ps, "
+            "we'll focus on Contentment, Playfulness, and finding balance. "
+            "What aspect of burnout is affecting you most - exhaustion, cynicism, or reduced effectiveness?"
+        ),
+        "prompt_context": (
+            "USER FOCUS: BURNOUT RECOVERY\n"
+            "- Prioritize rest, boundaries, and sustainable practices\n"
+            "- Apply 7Cs: Contentment (enough is enough), Compassion (self-care first)\n"
+            "- Apply 8Ps: Playfulness (joy without productivity), Peace (rest without guilt), "
+            "Patience (recovery takes time)\n"
+            "- Help identify energy drains vs. energy sources\n"
+            "- Focus on setting boundaries and saying no\n"
+            "- Reference digital wellness and screen time management"
+        ),
+        "rag_keywords": ["burnout", "exhaustion", "stress", "rest", "boundary", "balance", "energy", "recovery"]
+    },
+
+    "depression": {
+        "display_name": "Depression",
+        "welcome_message": (
+            "I'm glad you're here. Depression can make everything feel heavy and hopeless, "
+            "but reaching out is a meaningful step. I want to support you while being clear "
+            "that I'm a digital coach, not a therapist. If your depression feels severe, "
+            "connecting with a professional is important. For now, what's one small thing "
+            "you'd like to feel better about today?"
+        ),
+        "prompt_context": (
+            "USER FOCUS: DEPRESSION & LOW MOOD\n"
+            "- Be especially warm, patient, and non-judgmental\n"
+            "- Focus on tiny, achievable wins (behavioral activation)\n"
+            "- Apply 7Cs: Connection (combat isolation), Compassion (self-kindness)\n"
+            "- Apply 8Ps: Presence (one moment at a time), Purpose (finding small meanings)\n"
+            "- Use gratitude gently, not prescriptively\n"
+            "- Suggest professional support more readily than other focus areas\n"
+            "- Celebrate ANY effort to engage or share"
+        ),
+        "rag_keywords": ["depression", "mood", "hopeless", "motivation", "connection", "purpose", "meaning"]
+    },
+
+    "digital_wellness": {
+        "display_name": "Digital Wellness",
+        "welcome_message": (
+            "Digital wellness is at the heart of what I do! Our screens can be tools for "
+            "connection and growth, or sources of stress and distraction. Let's work together "
+            "to build a healthier relationship with technology using the Four Aces framework. "
+            "What's your biggest digital wellness challenge - screen time, social media, "
+            "or something else?"
+        ),
+        "prompt_context": (
+            "USER FOCUS: DIGITAL WELLNESS & SCREEN TIME\n"
+            "- This is LUMI's specialty - prioritize this content\n"
+            "- Apply Four Aces to technology use: Awareness (track usage), "
+            "Acceptance (no shame), Appreciation (mindful use), Awe (disconnect to reconnect)\n"
+            "- Focus on intention vs. compulsion with devices\n"
+            "- Reference specific strategies from 'Beyond Happy' on digital habits\n"
+            "- Suggest screen time tracking and digital boundaries\n"
+            "- Emphasize offline connection and presence"
+        ),
+        "rag_keywords": ["digital", "screen", "phone", "social media", "technology", "online", "internet", "device"]
+    },
+
+    "happiness": {
+        "display_name": "Happiness",
+        "welcome_message": (
+            "You've come to the right place! Happiness is my passion, and I'm excited to "
+            "explore this journey with you. Remember: happiness isn't a destination but a "
+            "way of being. The 7Cs and 8Ps from 'Beyond Happy' offer a complete framework "
+            "for cultivating lasting joy. What does happiness mean to you?"
+        ),
+        "prompt_context": (
+            "USER FOCUS: HAPPINESS & WELL-BEING\n"
+            "- This is the core topic - use all frameworks fully\n"
+            "- Apply all 7Cs: Contentment, Curiosity, Creativity, Compassion, "
+            "Compersion, Courage, Connection\n"
+            "- Apply all 8Ps: Presence, Positivity, Purpose, Peace, Playfulness, "
+            "Passion, Patience, Perseverance\n"
+            "- Emphasize: Happiness is a choice and a practice, not a destination\n"
+            "- Focus on internal locus of control and narrative self\n"
+            "- Reference specific concepts from 'Beyond Happy' and 'Four Aces'"
+        ),
+        "rag_keywords": ["happiness", "joy", "well-being", "positive", "fulfillment", "satisfaction", "meaning"]
+    }
+}
+
 # Professional Referral
 PROFESSIONAL_REFERRAL = (
     "\n\n"
@@ -384,9 +542,15 @@ class TherapeuticChatbot:
     # Response Generation
     # -------------------------------------------------------------------------
 
-    def generate_response(self, db: Session, whatsapp_number: str, user_message: str) -> Dict:
+    def generate_response(self, db: Session, whatsapp_number: str, user_message: str, focus_area: Optional[str] = None) -> Dict:
         """
         Generate a therapeutic response using GPT-4 + RAG (if available).
+
+        Args:
+            db: Database session
+            whatsapp_number: User identifier (phone or web:uuid)
+            user_message: The user's message
+            focus_area: Optional area of focus (addiction, burnout, etc.)
 
         Returns:
             {
@@ -486,6 +650,17 @@ class TherapeuticChatbot:
                 logger.info(f"🌟 Applying {paladin_name} Paladin")
 
             # -------------------------
+            # 4b. FOCUS AREA CONTEXT
+            # -------------------------
+            focus_context = ""
+            focus_keywords = []
+            if focus_area and focus_area in FOCUS_AREAS:
+                focus_config = FOCUS_AREAS[focus_area]
+                focus_context = f"\n\n=== USER'S AREA OF FOCUS: {focus_config['display_name'].upper()} ===\n{focus_config['prompt_context']}\n"
+                focus_keywords = focus_config.get("rag_keywords", [])
+                logger.info(f"🎯 Focus area active: {focus_area}")
+
+            # -------------------------
             # 5. Normal Conversation Flow
             # -------------------------
             try:
@@ -508,17 +683,23 @@ class TherapeuticChatbot:
                 logger.warning(f"⚠️ Error retrieving history: {e}")
                 conversation_history = []
 
-            # Retrieve RAG context
+            # Retrieve RAG context (enhanced with focus keywords if available)
             relevant_contexts = []
             if self.rag:
                 try:
+                    # Enhance query with focus keywords for better RAG retrieval
+                    enhanced_query = user_message
+                    if focus_keywords:
+                        enhanced_query = f"{user_message} {' '.join(focus_keywords[:3])}"
+                        logger.info(f"🔍 Enhanced RAG query with focus keywords: {focus_keywords[:3]}")
+
                     relevant_contexts = self.rag.retrieve_relevant_context(
-                        db, user_message, k=5
+                        db, enhanced_query, k=5
                     )
                 except Exception as e:
                     logger.error(f"❌ Error retrieving RAG context: {e}")
 
-            # Build prompt with Paladin context
+            # Build prompt with Focus Area and Paladin context
             try:
                 if self.rag:
                     prompt = self.rag.build_prompt_with_context(
@@ -527,11 +708,17 @@ class TherapeuticChatbot:
                 else:
                     prompt = f"You are LUMI, a compassionate digital wellness coach. User message: {user_message}"
 
+                # Add Focus Area context if selected
+                if focus_context:
+                    prompt += focus_context
+
                 # Add Paladin context if needed
                 if paladin_context:
                     prompt += paladin_context
             except Exception:
                 prompt = f"You are LUMI, a compassionate digital wellness coach. User message: {user_message}"
+                if focus_context:
+                    prompt += focus_context
                 if paladin_context:
                     prompt += paladin_context
 

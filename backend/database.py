@@ -65,16 +65,17 @@ User = aichatusers
 class Conversation(Base):
     """Conversation model for tracking chat sessions."""
     __tablename__ = "conversations"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     started_at = Column(DateTime, default=datetime.utcnow)
     last_message_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     message_count = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
-    
+    focus_area = Column(String(50), nullable=True)  # User's selected area of focus (burnout, addiction, etc.)
+
     def __repr__(self):
-        return f"<Conversation {self.id} for User {self.user_id}>"
+        return f"<Conversation {self.id} for User {self.user_id}, Focus: {self.focus_area}>"
 
 # ======================================================================
 # MESSAGE MODEL

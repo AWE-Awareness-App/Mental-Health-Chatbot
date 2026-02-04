@@ -786,17 +786,18 @@ async def whatsapp_status_webhook(request: Request):
 
 @app.post("/api/webChat")
 async def web_chat_tracked(request: Request):
-    """Enhanced web chat with conversation tracking."""
-    
+    """Enhanced web chat with conversation tracking and focus area support."""
+
     try:
         body = await request.json()
         user_message = body.get("content", "").strip()
         conversation_id = body.get("conversation_id")
         message_index = body.get("message_index", 0)
-        
+        focus_area = body.get("focus_area")  # Optional: User's selected focus area
+
         logger.info(
             f"💻 Web chat - Conv: {conversation_id}, "
-            f"Msg#{message_index}, Content: {user_message[:50]}..."
+            f"Msg#{message_index}, Focus: {focus_area}, Content: {user_message[:50]}..."
         )
         
         if not user_message:
@@ -822,22 +823,24 @@ async def web_chat_tracked(request: Request):
             response_dict = chatbot.generate_response(
                 db=db,
                 whatsapp_number=web_user_id,
-                user_message=user_message
+                user_message=user_message,
+                focus_area=focus_area  # Pass focus area for contextual responses
             )
-            
+
             response_text = response_dict.get("response", "")
             is_crisis = response_dict.get("is_crisis", False)
-            
+
             logger.info(
                 f"✓ Web chat response - Conv: {conversation_id}, "
-                f"Msg#{message_index + 1}"
+                f"Msg#{message_index + 1}, Focus: {focus_area}"
             )
-            
+
             return JSONResponse({
                 "conversation_id": conversation_id,
                 "message_index": message_index + 1,
                 "content": response_text,
-                "is_crisis": is_crisis
+                "is_crisis": is_crisis,
+                "focus_area": focus_area  # Echo back the focus area
             })
         
         except Exception as e:
@@ -859,6 +862,80 @@ async def web_chat_tracked(request: Request):
             "message_index": 0,
             "content": "Sorry, something went wrong.",
             "error": True
+        }, status_code=500)
+
+
+# ======================================================================
+# AREA OF FOCUS API
+# ======================================================================
+
+
+@app.post("/api/setFocusArea")
+async def set_focus_area(request: Request):
+    """Set the focus area for a conversation and return the welcome message."""
+
+    try:
+        body = await request.json()
+        conversation_id = body.get("conversation_id")
+        focus_area = body.get("focus_area", "").lower().replace(" ", "_").strip()
+
+        logger.info(f"🎯 Setting focus area: {focus_area} for conversation: {conversation_id}")
+
+        # Import FOCUS_AREAS from chatbot
+        from chatbot import FOCUS_AREAS
+
+        # Validate focus area
+        if focus_area not in FOCUS_AREAS:
+            valid_areas = list(FOCUS_AREAS.keys())
+            return JSONResponse({
+                "error": True,
+                "message": f"Invalid focus area. Valid options: {valid_areas}"
+            }, status_code=400)
+
+        # Generate new conversation ID if not provided
+        if not conversation_id:
+            conversation_id = str(uuid.uuid4())
+            logger.info(f"✓ New conversation created for focus area: {conversation_id}")
+
+        # Get focus area configuration
+        focus_config = FOCUS_AREAS[focus_area]
+
+        return JSONResponse({
+            "conversation_id": conversation_id,
+            "focus_area": focus_area,
+            "display_name": focus_config["display_name"],
+            "welcome_message": focus_config["welcome_message"]
+        })
+
+    except Exception as e:
+        logger.error(f"✗ Error setting focus area: {e}", exc_info=True)
+        return JSONResponse({
+            "error": True,
+            "message": "Failed to set focus area."
+        }, status_code=500)
+
+
+@app.get("/api/focusAreas")
+async def get_focus_areas():
+    """Get all available focus areas with their display names."""
+
+    try:
+        from chatbot import FOCUS_AREAS
+
+        focus_areas = [
+            {"key": key, "display_name": config["display_name"]}
+            for key, config in FOCUS_AREAS.items()
+        ]
+
+        return JSONResponse({
+            "focus_areas": focus_areas
+        })
+
+    except Exception as e:
+        logger.error(f"✗ Error getting focus areas: {e}", exc_info=True)
+        return JSONResponse({
+            "error": True,
+            "message": "Failed to get focus areas."
         }, status_code=500)
 
 
