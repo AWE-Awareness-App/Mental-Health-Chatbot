@@ -52,6 +52,10 @@ logger = logging.getLogger(__name__)
 # LUMI IDENTITY & SEVEN PALADINS CONSTANTS
 # =========================================================================
 
+# AWE Resources Links
+AWE_COACHING_URL = os.getenv("AWE_COACHING_URL", "https://awedigitalwellness.com/specialist-services")
+AWE_PATREON_URL = os.getenv("AWE_PATREON_URL", "https://www.patreon.com/cw/awedigitalwellness")
+
 # LUMI Identity Introduction
 LUMI_INTRODUCTION = (
     "I am LUMI, your digital wellness and happiness coach here to guide you "
@@ -62,7 +66,7 @@ LUMI_INTRODUCTION = (
     "\n\n"
     "However, I'm an AI assistant — not a therapist or a doctor. If you're facing "
     "serious mental health challenges, trauma, or crises, I'd recommend connecting with "
-    "an AWE human coach or specialist who can provide personalized professional support. "
+    f"an AWE human coach or specialist who can provide personalized professional support: {AWE_COACHING_URL}"
     "\n\n"
     "How can I help you on your wellness journey today?"
 )
@@ -372,6 +376,9 @@ PROFESSIONAL_REFERRAL = (
     "✓ Offer specialized expertise for your situation "
     "✓ Build a relationship over time "
     "\n\n"
+    f"📋 **Book 1:1 Coaching:** {AWE_COACHING_URL}\n"
+    f"💙 **Support our community:** {AWE_PATREON_URL}\n"
+    "\n"
     "Would you be open to exploring that option? "
     "Or would you like to continue with me while you consider it? "
     "\n\n"
