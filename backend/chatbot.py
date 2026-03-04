@@ -58,17 +58,8 @@ AWE_PATREON_URL = os.getenv("AWE_PATREON_URL", "https://www.patreon.com/cw/awedi
 
 # LUMI Identity Introduction
 LUMI_INTRODUCTION = (
-    "I am LUMI, your digital wellness and happiness coach here to guide you "
-    "to find balance, better relationships, and more joy even in our digital age. "
-    "\n\n"
-    "I leverage insights from habit formation and various frameworks like the Four Aces, "
-    "the 7Cs, and 8Ps to help you build a life you love. "
-    "\n\n"
-    "However, I'm an AI assistant — not a therapist or a doctor. If you're facing "
-    "serious mental health challenges, trauma, or crises, I'd recommend connecting with "
-    f"an AWE human coach or specialist who can provide personalized professional support: {AWE_COACHING_URL}"
-    "\n\n"
-    "How can I help you on your wellness journey today?"
+    "Hi, I'm LUMI 💛 Whether you're looking for a fresh start, a little more joy, or just curious, "
+    "I'm here for you. What would you like to explore?"
 )
 
 # Seven Paladins of Positivity (From "Beyond Happy")
@@ -213,11 +204,8 @@ FOCUS_AREAS = {
     "addiction": {
         "display_name": "Addiction",
         "welcome_message": (
-            "I understand you want to focus on addiction and habit change. "
-            "Breaking free from addictive patterns takes courage, and I'm here to support you. "
-            "The Four Aces framework - Awareness, Acceptance, Appreciation, and Awe - "
-            "can help you build healthier habits. What specific habit or pattern "
-            "would you like to work on today?"
+            "It takes real courage to show up here 💛 Building healthier habits is a journey, "
+            "and I'm with you every step. Let's start simple: what's one pattern you'd like to change?"
         ),
         "prompt_context": (
             "USER FOCUS: ADDICTION & HABIT CHANGE\n"
@@ -235,11 +223,8 @@ FOCUS_AREAS = {
     "anger": {
         "display_name": "Anger",
         "welcome_message": (
-            "I hear you - anger can be overwhelming. I'm here to help you understand "
-            "and manage these feelings constructively. Anger often signals unmet needs or "
-            "boundary violations. Using the 8Ps framework, especially Patience, Peace, and "
-            "Presence, we can work through this together. What's been triggering these "
-            "feelings for you?"
+            "Anger often has something important to tell us ☄️ I'm here to help you make sense "
+            "of it and find what works for you. What's been on your mind lately?"
         ),
         "prompt_context": (
             "USER FOCUS: ANGER MANAGEMENT\n"
@@ -257,10 +242,8 @@ FOCUS_AREAS = {
     "anxiety": {
         "display_name": "Anxiety",
         "welcome_message": (
-            "Anxiety can feel like a constant companion, but you don't have to face it alone. "
-            "I'm here to help you find calm and clarity. The Four Aces, particularly Awareness "
-            "and Acceptance, are powerful tools for managing anxious thoughts. Let's start "
-            "with a simple question: What's weighing most heavily on your mind right now?"
+            "You don't have to sit with anxious thoughts alone 💛 I'm here to help you find "
+            "a little more calm and clarity. What's weighing on you most right now?"
         ),
         "prompt_context": (
             "USER FOCUS: ANXIETY & WORRY\n"
@@ -278,10 +261,9 @@ FOCUS_AREAS = {
     "burnout": {
         "display_name": "Burnout",
         "welcome_message": (
-            "Burnout is your mind and body's way of saying 'something needs to change.' "
-            "I'm here to help you recover and rebuild sustainable energy. Using the 7Cs and 8Ps, "
-            "we'll focus on Contentment, Playfulness, and finding balance. "
-            "What aspect of burnout is affecting you most - exhaustion, cynicism, or reduced effectiveness?"
+            "The fact that you're here says you're ready for a shift 🔥 Let's work on rebuilding "
+            "your energy in a way that sticks. What's hitting hardest right now \u2014 exhaustion, "
+            "disconnection, or feeling stuck?"
         ),
         "prompt_context": (
             "USER FOCUS: BURNOUT RECOVERY\n"
@@ -299,11 +281,9 @@ FOCUS_AREAS = {
     "depression": {
         "display_name": "Depression",
         "welcome_message": (
-            "I'm glad you're here. Depression can make everything feel heavy and hopeless, "
-            "but reaching out is a meaningful step. I want to support you while being clear "
-            "that I'm a digital coach, not a therapist. If your depression feels severe, "
-            "connecting with a professional is important. For now, what's one small thing "
-            "you'd like to feel better about today?"
+            "I'm really glad you're here! Reaching out matters 💛 I'm a digital wellness coach, "
+            "not a therapist, so if things feel really heavy, please reach out to a professional too. "
+            "For now, what's one small thing you'd like to feel a little better about today?"
         ),
         "prompt_context": (
             "USER FOCUS: DEPRESSION & LOW MOOD\n"
@@ -321,11 +301,9 @@ FOCUS_AREAS = {
     "digital_wellness": {
         "display_name": "Digital Wellness",
         "welcome_message": (
-            "Digital wellness is at the heart of what I do! Our screens can be tools for "
-            "connection and growth, or sources of stress and distraction. Let's work together "
-            "to build a healthier relationship with technology using the Four Aces framework. "
-            "What's your biggest digital wellness challenge - screen time, social media, "
-            "or something else?"
+            "This is my sweet spot! 🌟 Our screens can be amazing tools but better when we're "
+            "intentional about how we use them. What's your biggest challenge right now: "
+            "screen time, social media, or something else?"
         ),
         "prompt_context": (
             "USER FOCUS: DIGITAL WELLNESS & SCREEN TIME\n"
@@ -343,10 +321,8 @@ FOCUS_AREAS = {
     "happiness": {
         "display_name": "Happiness",
         "welcome_message": (
-            "You've come to the right place! Happiness is my passion, and I'm excited to "
-            "explore this journey with you. Remember: happiness isn't a destination but a "
-            "way of being. The 7Cs and 8Ps from 'Beyond Happy' offer a complete framework "
-            "for cultivating lasting joy. What does happiness mean to you?"
+            "Love that you're here for this! \u2728 Happiness isn't a destination \u2014 it's something "
+            "we can build, one small step at a time \U0001f4ab. So let's start: what does happiness mean to you?"
         ),
         "prompt_context": (
             "USER FOCUS: HAPPINESS & WELL-BEING\n"
