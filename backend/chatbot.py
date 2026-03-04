@@ -419,7 +419,11 @@ class TherapeuticChatbot:
     # -------------------------------------------------------------------------
 
     def is_identity_question(self, message: str) -> bool:
-        """Check if user is asking about LUMI's identity."""
+        """Check if user is asking about LUMI's identity or sending a bare greeting."""
+        GREETING_WORDS = {"hi", "hello", "hey", "hiya", "start", "bonjour", "salut"}
+        if message.strip().lower().rstrip("!.,? ") in GREETING_WORDS:
+            return True
+
         identity_keywords = [
             "who are you", "what are you", "are you a therapist", "are you human",
             "are you real", "tell me about you", "what's your name", "who's lumi",

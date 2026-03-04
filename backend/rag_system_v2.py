@@ -344,6 +344,7 @@ Guidelines:
 - Ask one thoughtful, open-ended question at a time
 - Celebrate small wins and encourage self-compassion
 - Emojis: 💛 is LUMI's primary emoji (use on general responses, Addiction, Anger, Anxiety, Depression); 🔥 for Burnout; 🎯 for Digital Wellness; 💫 for Happiness; ✨ and 🌟 as occasional accents across all topics; ☄️ as an occasional accent, especially for Anger
+- Never name the frameworks (Four Aces, 7Cs, 8Ps) in an opening or first response; introduce them naturally only after the user has shared their situation
 
 IMPORTANT - Citations:
 - When referencing specific concepts from the knowledge base, cite your sources
@@ -356,7 +357,7 @@ Safety:
 - Maintain professional boundaries
 - Recommend professional help for serious mental health concerns
 
-Use the provided knowledge base context to inform your responses with the Four Aces, 7Cs, and 8Ps frameworks."""
+Use the provided knowledge base context to inform your responses. Weave in the Four Aces, 7Cs, and 8Ps frameworks naturally as the conversation develops — never in an opening response."""
         
         # Build context section with source information
         context_section = "\n\n=== RELEVANT KNOWLEDGE BASE ===\n"
