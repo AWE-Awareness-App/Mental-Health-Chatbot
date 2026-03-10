@@ -13,6 +13,7 @@ Version: 1.0.0
 """
 
 import os
+import re
 import time
 import logging
 import base64
@@ -33,6 +34,16 @@ from utils.audio_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def strip_emojis(text: str) -> str:
+    cleaned = re.sub(
+        r'[\U00002000-\U0000206F\U00002C00-\U00002DFF\U0000FE00-\U0000FE0F'
+        r'\U0001F000-\U0001FFFF\U00002500-\U00002BFF\U00002300-\U000023FF'
+        r'\U00002100-\U000021FF\u2600-\u27BF]',
+        '', text, flags=re.UNICODE
+    )
+    return re.sub(r'  +', ' ', cleaned).strip()
 
 # Create router with /api/voice prefix
 router = APIRouter(prefix="/api/voice", tags=["Voice"])
@@ -611,7 +622,7 @@ async def process_voice_conversation(
         if include_audio_response:
             tts_service = get_tts_service()
             synthesis = tts_service.synthesize(
-                text=bot_response_text,
+                text=strip_emojis(bot_response_text),
                 voice=voice,
                 audio_format="mp3"
             )
